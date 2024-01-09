@@ -7,5 +7,8 @@ rustflags = [
                               # more on it in a second
 ]
 
+[env]
+RUST_TEST_THREADS = "1"
+
 [unstable]
 profile-rustflags = true

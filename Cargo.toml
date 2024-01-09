@@ -8,9 +8,9 @@ members = [
 ]
 
 [workspace.dependencies]
-cargo-difftests = { path = "cargo-difftests", version = "0.2.0" }
-cargo-difftests-core = { path = "cargo-difftests-core", version = "0.2.0" }
-cargo-difftests-testclient = { path = "cargo-difftests-testclient", version = "0.2.0" }
+cargo-difftests = { path = "cargo-difftests", version = "0.3.0" }
+cargo-difftests-core = { path = "cargo-difftests-core", version = "0.3.0" }
+cargo-difftests-testclient = { path = "cargo-difftests-testclient", version = "0.3.0" }
 
 anyhow = "1.0.66"
 chrono = { version = "0.4.23", features = ["serde"] }

@@ -24,12 +24,23 @@ use cargo_difftests_core::CoreTestDesc;
 
 #[cfg(cargo_difftests)]
 extern "C" {
-    fn __llvm_profile_set_filename(filename: *const std::ffi::c_char);
+    pub static __llvm_profile_runtime: i32;
+    fn __llvm_profile_get_size_for_buffer() -> u64;
+    fn __llvm_profile_write_buffer(buffer: *mut libc::c_char) -> u64;
+    fn __llvm_profile_reset_counters();
 }
 
-// put a dummy for docs.rs
+// put dummies for docs.rs
 #[cfg(all(not(cargo_difftests), docsrs))]
-unsafe fn __llvm_profile_set_filename(_: *const std::ffi::c_char) {}
+unsafe fn __llvm_profile_get_size_for_buffer() -> u64 {
+    0
+}
+
+#[cfg(all(not(cargo_difftests), docsrs))]
+unsafe fn __llvm_profile_write_buffer(_: *mut libc::c_char) {}
+
+#[cfg(all(not(cargo_difftests), docsrs))]
+unsafe fn __llvm_profile_reset_counters() {}
 
 /// A description of a test.
 ///
@@ -56,6 +67,8 @@ pub struct TestDesc {
 pub struct DifftestsEnv {
     llvm_profile_file_name: OsString,
     llvm_profile_file_value: OsString,
+
+    llvm_profile_self_file: PathBuf,
 }
 
 impl DifftestsEnv {
@@ -69,6 +82,22 @@ impl DifftestsEnv {
     }
 }
 
+impl Drop for DifftestsEnv {
+    fn drop(&mut self) {
+        let size = unsafe { __llvm_profile_get_size_for_buffer() };
+
+        let mut buffer = Vec::<u8>::with_capacity(size as usize);
+
+        unsafe {
+            buffer.set_len(size as usize);
+            let r = __llvm_profile_write_buffer(buffer.as_mut_ptr() as *mut libc::c_char);
+            assert_eq!(r, 0);
+        }
+
+        std::fs::write(&self.llvm_profile_self_file, &buffer).unwrap();
+    }
+}
+
 /// Initializes the difftests environment.
 pub fn init(desc: TestDesc, tmpdir: &Path) -> std::io::Result<DifftestsEnv> {
     if tmpdir.exists() {
@@ -79,15 +108,7 @@ pub fn init(desc: TestDesc, tmpdir: &Path) -> std::io::Result<DifftestsEnv> {
     let self_profile_file =
         tmpdir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_PROFILE_FILENAME);
 
-    let self_profile_file_str = self_profile_file.to_str().unwrap();
-
-    std::fs::write(self_profile_file_str, "")?;
-
-    let self_profile_file_str_c = std::ffi::CString::new(self_profile_file_str).unwrap();
-
-    unsafe {
-        __llvm_profile_set_filename(self_profile_file_str_c.as_ptr());
-    }
+    std::fs::write(&self_profile_file, "")?;
 
     let self_info_path = tmpdir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_JSON_FILENAME);
 
@@ -112,8 +133,16 @@ pub fn init(desc: TestDesc, tmpdir: &Path) -> std::io::Result<DifftestsEnv> {
     // and for children
     let profraw_path =
         tmpdir.join(cargo_difftests_core::CARGO_DIFFTESTS_OTHER_PROFILE_FILENAME_TEMPLATE);
-    Ok(DifftestsEnv {
+    
+    let r = Ok(DifftestsEnv {
         llvm_profile_file_name: "LLVM_PROFILE_FILE".into(),
         llvm_profile_file_value: profraw_path.into(),
-    })
+        llvm_profile_self_file: self_profile_file,
+    });
+
+    unsafe {
+        __llvm_profile_reset_counters();
+    }
+
+    r
 }

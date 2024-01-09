@@ -2,7 +2,14 @@
 
 use cargo_difftests_sample_project::*;
 
-fn setup_difftests(group: &str, test_name: &str) {
+#[cfg(cargo_difftests)]
+type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
+
+#[cfg(not(cargo_difftests))]
+type DifftestsEnv = ();
+
+#[must_use]
+fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
   #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty 
   // without this cfg
   {
@@ -31,40 +38,48 @@ fn setup_difftests(group: &str, test_name: &str) {
       },
       &tmpdir,
     ).unwrap();
-    // right now, the difftests_env is not used, but if 
-    // spawning children, it is needed to pass some environment variables to
-    // them, like this:
+    // the difftests_env is important, because its Drop impl has
+    // some cleanup to do (including actually writing the profile).
+    //
+    // if spawning children, it is also needed to
+    // pass some environment variables to them, like this:
     //
     // cmd.envs(difftests_env.env_for_children());
+    difftests_env
   }
 }
 
 #[test]
 fn test_add() {
-  setup_difftests("simple", "test_add");
+  let _env = setup_difftests("simple", "test_add");
+  std::thread::sleep(std::time::Duration::from_millis(400));
   assert_eq!(add(1, 2), 3);
 }
 
 #[test]
 fn test_sub() {
-  setup_difftests("simple", "test_sub");
+  let _env = setup_difftests("simple", "test_sub");
+  std::thread::sleep(std::time::Duration::from_millis(100));
   assert_eq!(sub(3, 2), 1);
 }
 
 #[test]
 fn test_mul() {
-  setup_difftests("advanced", "test_mul");
+  let _env = setup_difftests("advanced", "test_mul");
+  std::thread::sleep(std::time::Duration::from_millis(1000));
   assert_eq!(mul(2, 3), 6);
 }
 
 #[test]
 fn test_div() {
-  setup_difftests("advanced", "test_div");
+  let _env = setup_difftests("advanced", "test_div");
+  std::thread::sleep(std::time::Duration::from_millis(100));
   assert_eq!(div(6, 3), Some(2));
 }
 
 #[test]
 fn test_div_2() {
-  setup_difftests("advanced", "test_div_2");
+  let _env = setup_difftests("advanced", "test_div_2");
+  std::thread::sleep(std::time::Duration::from_millis(10));
   assert_eq!(div(6, 0), None);
 }

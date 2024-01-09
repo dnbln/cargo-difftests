@@ -28,6 +28,10 @@ rustflags = [
                               # more on it in a second
 ]
 
+[env]
+RUST_TEST_THREADS = "1" # we need this for profiling to work properly
+# see comments on multithreading below
+
 [unstable]
 profile-rustflags = true
 ```
@@ -53,11 +57,14 @@ on child processes to do the same.
 An example usage of the testclient library could be as follows (taken from the sample directory, which has a full sample project set up for `cargo-difftests`):
 
 ```rust
-fn setup_difftests(
-    // a bit more on groups later.
-    group: &str,
-    test_name: &str
-) {
+#[cfg(cargo_difftests)]
+type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
+
+#[cfg(not(cargo_difftests))]
+type DifftestsEnv = ();
+
+#[must_use]
+fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
   #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty 
   // without this cfg
   {
@@ -86,14 +93,27 @@ fn setup_difftests(
       },
       &tmpdir,
     ).unwrap();
-    // right now, the difftests_env is not used, but if 
-    // spawning children, it is needed to pass some environment variables to
-    // them, like this:
+    // the difftests_env is important, because its Drop impl has
+    // some cleanup to do (including actually writing the profile).
+    //
+    // if spawning children, it is also needed to
+    // pass some environment variables to them, like this:
     //
     // cmd.envs(difftests_env.env_for_children());
+    difftests_env
   }
 }
+
+#[test]
+fn test_fn() {
+  let _env = setup_difftests("dummy_group", "test_fn");
+  assert_eq!(1 + 1, 2);
+}
 ```
+
+Keep in mind that only the profiling data for the code between the call to
+`cargo_difftests_testclient::init` and the `drop()` of the value it returns
+is kept track of.
 
 ## `cargo-difftests`
 
@@ -203,3 +223,16 @@ the root directory it is passed as part of a "group" and therefore to be
 analyzed together. This approach still keeps around all the original
 profiling data, but there won't be more intermediary by-products of
 the analysis than one per group, as opposed to one per test.
+
+## Multi-threading
+
+The way LLVM instrumentation works doesn't really lend itself well to the
+multi-threading of tests, so multiple tests cannot run at the same time.
+But a single test can spawn multiple threads, and the runtime will keep
+track of those threads as well.
+However, those extra threads *must* finish running before the test itself 
+finishes. If they do not, and they are still going while the next test is
+executing, they *will* interfere with that test's coverage.
+
+This is not a problem if all the test code is single-threaded; however,
+special caution should be taken for multi-threaded tests.
