@@ -1,0 +1,25 @@
+[package]
+name = "cargo-difftests"
+version = "0.1.1"
+edition = "2021"
+description = "A tool to find which tests have changed"
+license = "Apache-2.0"
+readme = "../README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow.workspace = true
+cargo-difftests-core.workspace = true
+chrono.workspace = true
+clap.workspace = true
+git2.workspace = true
+home.workspace = true
+log.workspace = true
+path-absolutize.workspace = true
+path-slash.workspace = true
+pretty_env_logger.workspace = true
+rustc-demangle.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

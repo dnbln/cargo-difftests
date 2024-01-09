@@ -1,0 +1,11 @@
+# .cargo/config.toml
+[profile.difftests]
+inherits = "dev"
+rustflags = [
+  "-C", "instrument-coverage", # flag required for instrumentation-based code coverage
+  "--cfg", "cargo_difftests", # cfg required for cargo-difftests-testclient, 
+                              # more on it in a second
+]
+
+[unstable]
+profile-rustflags = true
