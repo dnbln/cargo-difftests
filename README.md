@@ -1,6 +1,6 @@
 # cargo-difftests
 
-> "Insanity is doing the same thing over and over again and expecting different results"
+> "Insanity is doing the same thing over and over again and expecting different results."
 >
 > &#8212; Unknown author.
 
