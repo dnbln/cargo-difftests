@@ -59,6 +59,17 @@ pub struct DifftestsEnv {
     llvm_profile_file_value: OsString,
 
     llvm_profile_self_file: PathBuf,
+
+    #[cfg(feature = "enforce-single-running-test")]
+    _t_lock: std::sync::MutexGuard<'static, ()>,
+}
+
+#[cfg(feature = "enforce-single-running-test")]
+fn test_lock() -> std::sync::MutexGuard<'static, ()> {
+    use std::sync::{Mutex, OnceLock};
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    let lock = LOCK.get_or_init(|| Mutex::new(()));
+    lock.lock().unwrap()
 }
 
 impl DifftestsEnv {
@@ -76,7 +87,11 @@ impl Drop for DifftestsEnv {
     fn drop(&mut self) {
         unsafe {
             #[allow(temporary_cstring_as_ptr)]
-            __llvm_profile_set_filename(std::ffi::CString::new(self.llvm_profile_self_file.to_str().unwrap()).unwrap().as_ptr());
+            __llvm_profile_set_filename(
+                std::ffi::CString::new(self.llvm_profile_self_file.to_str().unwrap())
+                    .unwrap()
+                    .as_ptr(),
+            );
             let r = __llvm_profile_write_file();
             assert_eq!(r, 0);
         }
@@ -88,6 +103,9 @@ pub fn init<T: serde::Serialize>(
     desc: TestDesc<T>,
     tmpdir: &Path,
 ) -> std::io::Result<DifftestsEnv> {
+    #[cfg(feature = "enforce-single-running-test")]
+    let _t_lock = test_lock();
+
     if tmpdir.exists() {
         std::fs::remove_dir_all(tmpdir)?;
     }
@@ -122,6 +140,9 @@ pub fn init<T: serde::Serialize>(
         llvm_profile_file_name: "LLVM_PROFILE_FILE".into(),
         llvm_profile_file_value: profraw_path.into(),
         llvm_profile_self_file: self_profile_file,
+
+        #[cfg(feature = "enforce-single-running-test")]
+        _t_lock,
     });
 
     unsafe {
