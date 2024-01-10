@@ -10,6 +10,8 @@
 ## Prerequisites
 
 - [`cargo-binutils`](https://github.com/rust-embedded/cargo-binutils)
+- Optionally, `cargo install rustc-wrapper-difftests`, to only emit
+coverage information for crates within the workspace. See [rustc-wrapper-difftests](#rustc-wrapper-difftests) for more.
 
 ## Cargo config setup
 
@@ -20,13 +22,37 @@ following to your `.cargo/config.toml`:
 
 ```toml
 # .cargo/config.toml
-[profile.difftests] # you can name the profile whatever you want
+
+# Do either one of the following:
+# 1. Uncomment the line in rustflags to use the `-C instrument-coverage` flag.
+# 2. (Recommended) Uncomment the lines for `build.rustc-wrapper` and `build.rustc-workspace-wrapper`
+# to use the `rustc-wrapper-difftests` wrapper.
+# This will enable instrumentation-based code coverage before calling rustc,
+# but it does so only for workspace packages.
+# This has the effect that the code coverage is only computed for the workspace
+# packages, and not for the dependencies.
+# This option is recommended because it is faster and produces less output.
+#
+# It never adds the `-C instrument-coverage` flag to the rustflags if
+# `--cfg cargo_difftests` is not specified, or if it was specified already.
+
+
+[profile.difftests]
 inherits = "dev"
 rustflags = [
-  "-C", "instrument-coverage", # flag required for instrumentation-based code coverage
-  "--cfg", "cargo_difftests", # cfg required for cargo-difftests-testclient, 
-                              # more on it in a second
+  # Uncomment the following line to use instrumentation-based code coverage.
+  # (option 1 above).
+  #
+  # "-C", "instrument-coverage", # Enable instrumentation-based code coverage
+  "--cfg", "cargo_difftests", # Enable the cargo_difftests cfg.
 ]
+
+# Uncomment the following lines to use instrumentation-based code coverage
+# (option 2 above).
+#
+# [build]
+# rustc-wrapper = "rustc-wrapper-difftests"
+# rustc-workspace-wrapper = "rustc-wrapper-difftests-workspace"
 
 [env]
 RUST_TEST_THREADS = "1" # we need this for profiling to work properly
@@ -63,51 +89,65 @@ type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
 #[cfg(not(cargo_difftests))]
 type DifftestsEnv = ();
 
+#[derive(serde::Serialize, Clone)]
+struct ExtraArgs {
+    pkg_name: String,
+    crate_name: String,
+    bin_name: Option<String>,
+    test_name: String,
+    group_name: String,
+}
+
 #[must_use]
 fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
-  #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty 
-  // without this cfg
-  {
-    // the temporary directory where we will store everything we need.
-    // this should be passed to various `cargo difftests` subcommands as the 
-    // `--dir` option.
-    let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join("cargo-difftests").join(group).join(test_name);
-    let difftests_env = cargo_difftests_testclient::init(
-      cargo_difftests_testclient::TestDesc {
-        // a "description" of the test.
-        // cargo-difftests doesn't care about what you put here 
-        // (except for the bin_path field) but it is your job to use
-        // the data in here to identify the test
-        // and rerun it if needed.
-        // those fields are here to guide you, but you can add any other
-        // fields you might need (see the `other_fields` field below)
-        pkg_name: env!("CARGO_PKG_NAME").to_string(),
-        crate_name: env!("CARGO_CRATE_NAME").to_string(),
-        bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
-        bin_path: std::env::current_exe().unwrap(),
-        test_name: test_name.to_string(),
-        other_fields: std::collections::HashMap::new(), // any other 
-        // fields you might want to add, to identify the test.
-        // (the map is of type HashMap<String, String>)
-      },
-      &tmpdir,
-    ).unwrap();
-    // the difftests_env is important, because its Drop impl has
-    // some cleanup to do (including actually writing the profile).
-    //
-    // if spawning children, it is also needed to
-    // pass some environment variables to them, like this:
-    //
-    // cmd.envs(difftests_env.env_for_children());
-    difftests_env
-  }
+    #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty
+    // without this cfg
+    {
+        // the temporary directory where we will store everything we need.
+        // this should be passed to various `cargo difftests` subcommands as the
+        // `--dir` option.
+        let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join("cargo-difftests")
+            .join(group)
+            .join(test_name);
+        let difftests_env = cargo_difftests_testclient::init(
+            cargo_difftests_testclient::TestDesc::<ExtraArgs> {
+                // a "description" of the test.
+                // cargo-difftests needs the binary path for analysis
+                bin_path: std::env::current_exe().unwrap(),
+                // the extra fields that you might need to identify the test.
+                //
+                // it is your job to use
+                // the data in here to identify the test
+                // and rerun it if needed.
+                // you can use any type you want, but it has to
+                // implement `serde::Serialize`
+                extra: ExtraArgs {
+                    pkg_name: env!("CARGO_PKG_NAME").to_string(),
+                    crate_name: env!("CARGO_CRATE_NAME").to_string(),
+                    bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
+                    test_name: test_name.to_string(),
+                    group_name: group.to_string(),
+                },
+            },
+            &tmpdir,
+        )
+        .unwrap();
+        // the difftests_env is important, because its Drop impl has
+        // some cleanup to do (including actually writing the profile).
+        //
+        // if spawning children, it is also needed to
+        // pass some environment variables to them, like this:
+        //
+        // cmd.envs(difftests_env.env_for_children());
+        difftests_env
+    }
 }
 
 #[test]
 fn test_fn() {
-  let _env = setup_difftests("dummy_group", "test_fn");
-  assert_eq!(1 + 1, 2);
+    let _env = setup_difftests("dummy_group", "test_fn");
+    assert_eq!(1 + 1, 2);
 }
 ```
 
@@ -223,6 +263,23 @@ the root directory it is passed as part of a "group" and therefore to be
 analyzed together. This approach still keeps around all the original
 profiling data, but there won't be more intermediary by-products of
 the analysis than one per group, as opposed to one per test.
+
+### rustc-wrapper-difftests
+
+This wrapper checks that the `--cfg cargo_difftests` flag
+is passed to `rustc`, and if it is, it also checks whether
+we are currently compiling a crate from the workspace.
+
+If both of those conditions are true, the wrapper also adds
+the `-C instrument-coverage` flag. It does nothing when 
+compiling a crate from outside the workspace with
+`--cfg cargo_difftests`, nor when calling it without
+`--cfg cargo_difftests`.
+
+This has the effect of not emitting coverage information for
+dependencies outside the workspace, speeding-up the running
+of the tests, making the profiles much smaller, and their
+subsequent analysis much faster.
 
 ## Multi-threading
 

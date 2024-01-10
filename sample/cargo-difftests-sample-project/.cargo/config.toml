@@ -1,11 +1,34 @@
 # .cargo/config.toml
+
+# Do either one of the following:
+# 1. Uncomment the line in rustflags to use the `-C instrument-coverage` flag.
+# 2. (Recommended) Uncomment the lines for `build.rustc-wrapper` and `build.rustc-workspace-wrapper`
+# to use the `rustc-wrapper-difftests` wrapper.
+# This will enable instrumentation-based code coverage before calling rustc,
+# but it does so only for workspace packages.
+# This has the effect that the code coverage is only computed for the workspace
+# packages, and not for the dependencies.
+# This option is recommended because it is faster and produces less output.
+#
+# It never adds the `-C instrument-coverage` flag to the rustflags if
+# `--cfg cargo_difftests` is not specified.
+
 [profile.difftests]
 inherits = "dev"
 rustflags = [
-  "-C", "instrument-coverage", # flag required for instrumentation-based code coverage
-  "--cfg", "cargo_difftests", # cfg required for cargo-difftests-testclient, 
-                              # more on it in a second
+  # Uncomment the following line to use instrumentation-based code coverage.
+  # (option 1 above).
+  #
+  # "-C", "instrument-coverage", # Enable instrumentation-based code coverage
+  "--cfg", "cargo_difftests", # Enable the cargo_difftests cfg.
 ]
+
+# Uncomment the following lines to use instrumentation-based code coverage
+# (option 2 above).
+#
+[build]
+rustc-wrapper = "rustc-wrapper-difftests"
+rustc-workspace-wrapper = "rustc-wrapper-difftests-workspace"
 
 [env]
 RUST_TEST_THREADS = "1"

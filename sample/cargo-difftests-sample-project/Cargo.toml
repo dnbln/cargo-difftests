@@ -9,3 +9,4 @@ edition = "2021"
 
 [dev-dependencies]
 cargo-difftests-testclient.workspace = true
+serde.workspace = true

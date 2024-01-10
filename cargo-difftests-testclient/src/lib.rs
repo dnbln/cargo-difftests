@@ -16,7 +16,6 @@
 
 #![cfg(any(cargo_difftests, docsrs))]
 
-use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
@@ -25,19 +24,19 @@ use cargo_difftests_core::CoreTestDesc;
 #[cfg(cargo_difftests)]
 extern "C" {
     pub static __llvm_profile_runtime: i32;
-    fn __llvm_profile_get_size_for_buffer() -> u64;
-    fn __llvm_profile_write_buffer(buffer: *mut libc::c_char) -> u64;
+    fn __llvm_profile_set_filename(filename: *const libc::c_char);
+    fn __llvm_profile_write_file() -> libc::c_int;
     fn __llvm_profile_reset_counters();
 }
 
 // put dummies for docs.rs
 #[cfg(all(not(cargo_difftests), docsrs))]
-unsafe fn __llvm_profile_get_size_for_buffer() -> u64 {
-    0
-}
+unsafe fn __llvm_profile_set_filename(_: *const libc::c_char) {}
 
 #[cfg(all(not(cargo_difftests), docsrs))]
-unsafe fn __llvm_profile_write_buffer(_: *mut libc::c_char) {}
+unsafe fn __llvm_profile_write_file() -> libc::c_int {
+    0
+}
 
 #[cfg(all(not(cargo_difftests), docsrs))]
 unsafe fn __llvm_profile_reset_counters() {}
@@ -47,20 +46,11 @@ unsafe fn __llvm_profile_reset_counters() {}
 /// This is used to identify the test, and the binary from which it came from.
 /// `cargo difftests` only uses the `bin_path`, all the other fields can
 /// have any values you'd like to give them.
-pub struct TestDesc {
-    /// The package name.
-    pub pkg_name: String,
-    /// The crate name.
-    pub crate_name: String,
-    /// The binary name.
-    pub bin_name: Option<String>,
+pub struct TestDesc<T: serde::Serialize> {
     /// The binary path.
     pub bin_path: PathBuf,
-    /// The test name.
-    pub test_name: String,
-
     /// Any other fields to help identify the test.
-    pub other_fields: HashMap<String, String>,
+    pub extra: T,
 }
 
 /// The difftests environment.
@@ -84,22 +74,20 @@ impl DifftestsEnv {
 
 impl Drop for DifftestsEnv {
     fn drop(&mut self) {
-        let size = unsafe { __llvm_profile_get_size_for_buffer() };
-
-        let mut buffer = Vec::<u8>::with_capacity(size as usize);
-
         unsafe {
-            buffer.set_len(size as usize);
-            let r = __llvm_profile_write_buffer(buffer.as_mut_ptr() as *mut libc::c_char);
+            #[allow(temporary_cstring_as_ptr)]
+            __llvm_profile_set_filename(std::ffi::CString::new(self.llvm_profile_self_file.to_str().unwrap()).unwrap().as_ptr());
+            let r = __llvm_profile_write_file();
             assert_eq!(r, 0);
         }
-
-        std::fs::write(&self.llvm_profile_self_file, &buffer).unwrap();
     }
 }
 
 /// Initializes the difftests environment.
-pub fn init(desc: TestDesc, tmpdir: &Path) -> std::io::Result<DifftestsEnv> {
+pub fn init<T: serde::Serialize>(
+    desc: TestDesc<T>,
+    tmpdir: &Path,
+) -> std::io::Result<DifftestsEnv> {
     if tmpdir.exists() {
         std::fs::remove_dir_all(tmpdir)?;
     }
@@ -113,12 +101,8 @@ pub fn init(desc: TestDesc, tmpdir: &Path) -> std::io::Result<DifftestsEnv> {
     let self_info_path = tmpdir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_JSON_FILENAME);
 
     let core_test_desc = CoreTestDesc {
-        pkg_name: desc.pkg_name,
-        crate_name: desc.crate_name,
-        bin_name: desc.bin_name,
         bin_path: desc.bin_path,
-        test_name: desc.test_name,
-        other_fields: desc.other_fields,
+        extra: serde_json::to_value(&desc.extra).unwrap(),
     };
 
     let self_info = serde_json::to_string(&core_test_desc).unwrap();
@@ -133,7 +117,7 @@ pub fn init(desc: TestDesc, tmpdir: &Path) -> std::io::Result<DifftestsEnv> {
     // and for children
     let profraw_path =
         tmpdir.join(cargo_difftests_core::CARGO_DIFFTESTS_OTHER_PROFILE_FILENAME_TEMPLATE);
-    
+
     let r = Ok(DifftestsEnv {
         llvm_profile_file_name: "LLVM_PROFILE_FILE".into(),
         llvm_profile_file_value: profraw_path.into(),

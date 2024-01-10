@@ -1,3 +1,24 @@
+# 0.4.0
+
+Released: 2023-01-10
+
+## Breaking changes
+
+The `TestDesc` now accepts any serializable type for the `extra` field,
+and the fields which weren't needed are now gone.
+
+## Other improvements
+
+Improved docs and fixed doctests.
+
+### `rustc-wrapper-difftests`
+
+`rustc-wrapper-difftests` changes rustc invocation flags when
+using difftests, so that rustc only enables coverage
+instrumentation for crates within the workspace.
+
+See [the section of the README](README.md#rustc-wrapper-difftests) for more.
+
 # 0.3.0
 
 ## Breaking changes

@@ -14,18 +14,22 @@
  *    limitations under the License.
  */
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct CoreTestDesc {
-    pub pkg_name: String,
-    pub crate_name: String,
-    pub bin_name: Option<String>,
     pub bin_path: PathBuf,
-    pub test_name: String,
+    pub extra: serde_json::Value,
+}
 
-    pub other_fields: HashMap<String, String>,
+impl CoreTestDesc {
+    pub fn parse_extra<T: serde::de::DeserializeOwned>(&self) -> Result<T, serde_json::Error> {
+        serde_json::value::from_value(self.extra.clone())
+    }
+
+    pub fn into_extra<T: serde::de::DeserializeOwned>(self) -> Result<T, serde_json::Error> {
+        serde_json::value::from_value(self.extra)
+    }
 }
 
 pub const CARGO_DIFFTESTS_VERSION_FILENAME: &str = "cargo_difftests_version";

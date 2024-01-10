@@ -100,7 +100,7 @@ checksum = "7f30e7476521f6f8af1a1c4c0b8cc94f0bee37d91763d0ca2665f299b6cd8aec"
 
 [[package]]
 name = "cargo-difftests"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "cargo-difftests-core",
@@ -120,9 +120,10 @@ dependencies = [
 
 [[package]]
 name = "cargo-difftests-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -130,15 +131,17 @@ name = "cargo-difftests-sample-project"
 version = "0.1.0"
 dependencies = [
  "cargo-difftests-testclient",
+ "serde",
 ]
 
 [[package]]
 name = "cargo-difftests-testclient"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cargo-difftests-core",
  "libc",
  "log",
+ "serde",
  "serde_json",
 ]
 
@@ -562,6 +565,10 @@ name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
+
+[[package]]
+name = "rustc-wrapper-difftests"
+version = "0.4.0"
 
 [[package]]
 name = "rustix"

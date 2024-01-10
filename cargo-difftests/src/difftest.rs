@@ -86,11 +86,6 @@ impl Difftest {
     }
 
     /// Merges the `.profraw` files into a `.profdata` file, via `llvm-profdata merge`.
-    /// This method gives access to a new type, [`HasProfdata`], which encodes the
-    /// invariant that the `.profdata` file was created, and its output can be
-    /// used.
-    ///
-    /// See [`HasProfdata`] for more details.
     pub fn merge_profraw_files_into_profdata(
         &mut self,
         force: bool,
@@ -116,10 +111,6 @@ impl Difftest {
     ///
     /// This is used by the `--index-strategy=always-and-clean` flag, which keeps
     /// the test index data around, even if the profiling data is deleted.
-    ///
-    /// Given that the profiling data is deleted, the [`HasProfdata`] and
-    /// [`HasExportedProfdata`] can never be created again from this [`Difftest`],
-    /// and to get the profiling data the test has to be rerun.
     pub fn clean(&mut self) -> DifftestsResult<()> {
         fn clean_file(f: &mut Option<PathBuf>) -> DifftestsResult<()> {
             if let Some(f) = f {
@@ -150,9 +141,8 @@ impl Difftest {
         self.cleaned
     }
 
-    /// Checks whether the [`Difftest`] has the `.profdata` file, and if so,
-    /// returns Some([`HasProfdata`]), otherwise [`None`].
-    pub fn has_profdata(&mut self) -> bool {
+    /// Checks whether the [`Difftest`] has the `.profdata` file.
+    pub fn has_profdata(&self) -> bool {
         if self.cleaned {
             return false;
         }
@@ -177,10 +167,15 @@ impl Difftest {
 
     /// Reads the `.profdata` profiling data file, to be able to use
     /// it for analysis.
+    /// 
+    /// This function should be ran after
+    /// [`Difftest::merge_profraw_files_into_profdata`].
     pub fn export_profdata(
         &self,
         config: ExportProfdataConfig,
     ) -> DifftestsResult<analysis_data::CoverageData> {
+        assert!(self.has_profdata());
+
         let ExportProfdataConfig {
             ignore_registry_files,
             mut other_binaries,
@@ -209,6 +204,9 @@ impl Difftest {
     ///
     /// See the [`AnalysisContext`] type and the [`analysis`](crate::analysis)
     /// module for how to perform the analysis.
+    /// 
+    /// This function should be ran after
+    /// [`Difftest::merge_profraw_files_into_profdata`].
     pub fn start_analysis(
         &mut self,
         config: ExportProfdataConfig,

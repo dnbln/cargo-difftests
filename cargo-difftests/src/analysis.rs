@@ -41,15 +41,12 @@
 //! #     analysis::{AnalysisConfig, AnalysisResult, DirtyAlgorithm},
 //! # };
 //! let mut difftest = Difftest::discover_from(PathBuf::from("difftest"), None)?;
-//! let has_profdata = difftest.merge_profraw_files_into_profdata(false)?;
-//! let has_exported_profdata = has_profdata.export_profdata_file(ExportProfdataConfig {
+//! difftest.merge_profraw_files_into_profdata(false)?;
+//!
+//! let mut analysis_context = difftest.start_analysis(ExportProfdataConfig {
 //!     ignore_registry_files: true,
-//!     force: false,
-//!     test_desc: None,
 //!     other_binaries: vec![],
 //! })?;
-//!
-//! let mut analysis_context = has_exported_profdata.start_analysis()?;
 //! analysis_context.run(&AnalysisConfig {
 //!     dirty_algorithm: DirtyAlgorithm::FileSystemMtimes,
 //! })?;
@@ -78,19 +75,20 @@
 //! # };
 //! // compile the test index first
 //! let mut difftest = Difftest::discover_from(PathBuf::from("difftest"), None)?;
-//! let has_profdata = difftest.merge_profraw_files_into_profdata(false)?;
-//! let has_exported_profdata = has_profdata.export_profdata_file(ExportProfdataConfig {
-//!     ignore_registry_files: true,
-//!     force: false,
-//!     test_desc: None,
-//!     other_binaries: vec![],
-//! })?;
+//! difftest.merge_profraw_files_into_profdata(false)?;
 //!
-//! let test_index = has_exported_profdata.compile_test_index_data(IndexDataCompilerConfig {
-//!     remove_bin_path: true,
-//!     accept_file: Box::new(|_| true),
-//!     index_filename_converter: Box::new(|p| p.to_path_buf()),
-//! })?;
+//! let test_index = difftest.compile_test_index_data(
+//!     ExportProfdataConfig {
+//!         ignore_registry_files: true,
+//!         other_binaries: vec![],
+//!     },
+//!     IndexDataCompilerConfig {
+//!         ignore_registry_files: true,
+//!         remove_bin_path: true,
+//!         accept_file: Box::new(|_| true),
+//!         index_filename_converter: Box::new(|p| p.to_path_buf()),
+//!     }
+//! )?;
 //!
 //! // optionally save it
 //! test_index.write_to_file(Path::new("test_index.json"))?;

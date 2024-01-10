@@ -632,7 +632,7 @@ fn run_merge_profdata(dir: PathBuf, force: bool) -> CargoDifftestsResult {
 
 fn run_export_profdata(dir: PathBuf, cmd: ExportProfdataCommand) -> CargoDifftestsResult {
     // we do not need the index resolver here, because we are not going to use the index
-    let mut discovered = Difftest::discover_from(dir, None)?;
+    let discovered = Difftest::discover_from(dir, None)?;
 
     if !discovered.has_profdata() {
         bail!("difftest directory does not have a .profdata file");
@@ -752,7 +752,7 @@ fn run_compile_test_index(
     export_profdata_config_flags: ExportProfdataConfigFlags,
     compile_test_index_flags: CompileTestIndexFlags,
 ) -> CargoDifftestsResult {
-    let mut discovered = Difftest::discover_from(dir, None)?;
+    let discovered = Difftest::discover_from(dir, None)?;
     assert!(discovered.has_profdata());
 
     let config = compile_test_index_config(compile_test_index_flags)?;
