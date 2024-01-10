@@ -1,0 +1,10 @@
+[placeholders.coverage_area]
+type = "string"
+prompt = "Coverage area?"
+choices = ["all", "workspace-only"]
+default = "workspace-only"
+
+[placeholders.internal]
+type = "bool"
+prompt = "Internal to cargo-difftests repository?"
+default = false

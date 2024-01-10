@@ -13,7 +13,25 @@
 - Optionally, `cargo install rustc-wrapper-difftests`, to only emit
 coverage information for crates within the workspace. See [rustc-wrapper-difftests](#rustc-wrapper-difftests) for more.
 
-## Cargo config setup
+## Recommended setup
+
+The recommended way to setup a project is to use the `cargo-generate`
+template, so if you don't have `cargo-generate`, install it first:
+
+```bash
+cargo install cargo-generate
+```
+
+And now everything left to do is run `cargo-generate` to generate a
+project for us.
+
+```
+cargo generate dnbln/cargo-difftests cargo-generate-templates/cargo-difftests-sample-project -d internal=false
+```
+
+## Manual setup
+
+### Cargo config setup
 
 First, before we are able to do anything, we need a special profile
 to output the coverage information, as well as a flag to enable the
@@ -62,11 +80,13 @@ RUST_TEST_THREADS = "1" # we need this for profiling to work properly
 profile-rustflags = true
 ```
 
+## Components
+
 Now, the project has 2 main components:
 - `cargo-difftests-testclient`
 - `cargo-difftests`
 
-## `cargo-difftests-testclient`
+### `cargo-difftests-testclient`
 
 The test client is a bit of code that has to be run before each test.
 It is given a basic description of the test (test name, which test
@@ -155,7 +175,7 @@ Keep in mind that only the profiling data for the code between the call to
 `cargo_difftests_testclient::init` and the `drop()` of the value it returns
 is kept track of.
 
-## `cargo-difftests`
+### `cargo-difftests`
 
 After all the tests have been run, the profiling data has to be interpreted,
 and we have to check that the files that contain the code that was ran have
