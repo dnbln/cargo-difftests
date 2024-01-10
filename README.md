@@ -29,6 +29,42 @@ project for us.
 cargo generate dnbln/cargo-difftests cargo-generate-templates/cargo-difftests-sample-project -d internal=false
 ```
 
+After that, you only need to remember to use the `difftests` profile
+when running tests, which can be done like:
+
+```rust
+cargo t --profile difftests
+```
+
+Refer to the [`testclient`](#cargo-difftests-testclient) section for
+what you have to keep in mind while writing tests.
+
+A simple use of the `cargo difftests` now is as follows (in the template repository):
+
+```bash
+% cargo t --profile difftests # collect profiling data
+% cargo difftests analyze-all
+% touch src/advanced_arithmetic.rs # change mtime
+% cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+clean
+% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+dirty
+% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+dirty
+% cargo t --profile difftests test_mul
+% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+clean
+% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+dirty
+% cargo t --profile difftests test_div
+% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+clean
+```
+
+Now it's highly recommended to setup another binary to actually run those tests,
+which would invoke `cargo-difftests` (preferably the `analyze-all` subcommand),
+and use its output to rerun the tests if needed.
+
 ## Manual setup
 
 ### Cargo config setup
