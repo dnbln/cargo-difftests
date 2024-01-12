@@ -115,13 +115,13 @@ fn test_mul() {
 #[test]
 fn test_div() {
     let _env = setup_difftests_group("advanced");
-    std::thread::sleep(std::time::Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(1000));
     assert_eq!(div(6, 3), Some(2));
 }
 
 #[test]
 fn test_div_2() {
     let _env = setup_difftests_group("advanced");
-    std::thread::sleep(std::time::Duration::from_millis(10));
+    std::thread::sleep(std::time::Duration::from_millis(1000));
     assert_eq!(div(6, 0), None);
 }

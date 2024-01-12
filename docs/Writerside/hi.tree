@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE instance-profile
+        SYSTEM "https://resources.jetbrains.com/writerside/1.0/product-profile.dtd">
+
+<instance-profile id="hi" name="Help Instance"
+                 start-page="Overview.md">
+
+    <toc-element topic="Overview.md"/>
+    <toc-element topic="Setup-with-cargo-generate.md"/>
+    <toc-element topic="Manual-setup.md"/>
+    <toc-element topic="Use-with-analyze-all.md"/>
+</instance-profile>

@@ -30,8 +30,8 @@ rustflags = [
 rustc-wrapper = "rustc-wrapper-difftests"
 rustc-workspace-wrapper = "rustc-wrapper-difftests-workspace"
 
-[env]
-RUST_TEST_THREADS = "1"
+# [env]
+# RUST_TEST_THREADS = "1"
 
 [unstable]
 profile-rustflags = true

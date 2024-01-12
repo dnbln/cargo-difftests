@@ -24,6 +24,12 @@ impl From<GroupName> for String {
     }
 }
 
+impl std::fmt::Display for GroupName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
+
 impl GroupName {
     pub fn as_str(&self) -> &str {
         self.0.as_ref()
