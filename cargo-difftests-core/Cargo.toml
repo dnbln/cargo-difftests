@@ -8,6 +8,10 @@ repository = "https://github.com/dnbln/cargo-difftests"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+groups = []
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

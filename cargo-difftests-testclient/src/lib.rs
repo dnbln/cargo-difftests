@@ -21,25 +21,7 @@ use std::path::{Path, PathBuf};
 
 use cargo_difftests_core::CoreTestDesc;
 
-#[cfg(cargo_difftests)]
-extern "C" {
-    pub static __llvm_profile_runtime: i32;
-    fn __llvm_profile_set_filename(filename: *const libc::c_char);
-    fn __llvm_profile_write_file() -> libc::c_int;
-    fn __llvm_profile_reset_counters();
-}
-
-// put dummies for docs.rs
-#[cfg(all(not(cargo_difftests), docsrs))]
-unsafe fn __llvm_profile_set_filename(_: *const libc::c_char) {}
-
-#[cfg(all(not(cargo_difftests), docsrs))]
-unsafe fn __llvm_profile_write_file() -> libc::c_int {
-    0
-}
-
-#[cfg(all(not(cargo_difftests), docsrs))]
-unsafe fn __llvm_profile_reset_counters() {}
+mod llvm_profiling;
 
 /// A description of a test.
 ///
@@ -53,18 +35,73 @@ pub struct TestDesc<T: serde::Serialize> {
     pub extra: T,
 }
 
+struct SelfProfileWriter {
+    llvm_profile_self_file: PathBuf,
+}
+
+impl SelfProfileWriter {
+    fn do_write_to_file(file: &std::path::Path) {
+        unsafe {
+            #[allow(temporary_cstring_as_ptr)]
+            llvm_profiling::__llvm_profile_set_filename(
+                std::ffi::CString::new(file.to_str().unwrap())
+                    .unwrap()
+                    .as_ptr(),
+            );
+            let r = llvm_profiling::__llvm_profile_write_file();
+            assert_eq!(r, 0);
+        }
+    }
+}
+
+impl Drop for SelfProfileWriter {
+    fn drop(&mut self) {
+        Self::do_write_to_file(&self.llvm_profile_self_file);
+    }
+}
+
+enum DifftestsEnvInner {
+    Test {
+        #[allow(dead_code)]
+        self_profile_drop_writer: SelfProfileWriter,
+
+        #[cfg(all(
+            feature = "enforce-single-running-test",
+            not(feature = "parallel-groups")
+        ))]
+        _t_lock: std::sync::MutexGuard<'static, ()>,
+    },
+    #[cfg(feature = "groups")]
+    Group(groups::GroupDifftestsEnv),
+}
+
+#[cfg(feature = "parallel-groups")]
+impl Drop for DifftestsEnvInner {
+    fn drop(&mut self) {
+        match self {
+            DifftestsEnvInner::Test { .. } => {
+                let mut _l = groups::wr_test_group_dec();
+                *_l = groups::State::None;
+                groups::crs_notify();
+            }
+            DifftestsEnvInner::Group(_) => {}
+        }
+    }
+}
+
 /// The difftests environment.
 pub struct DifftestsEnv {
     llvm_profile_file_name: OsString,
     llvm_profile_file_value: OsString,
 
-    llvm_profile_self_file: PathBuf,
-
-    #[cfg(feature = "enforce-single-running-test")]
-    _t_lock: std::sync::MutexGuard<'static, ()>,
+    #[allow(dead_code)]
+    difftests_env_inner: DifftestsEnvInner,
 }
 
-#[cfg(feature = "enforce-single-running-test")]
+#[cfg(all(
+    feature = "enforce-single-running-test",
+    not(feature = "parallel-groups")
+))]
 fn test_lock() -> std::sync::MutexGuard<'static, ()> {
     use std::sync::{Mutex, OnceLock};
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -83,28 +120,19 @@ impl DifftestsEnv {
     }
 }
 
-impl Drop for DifftestsEnv {
-    fn drop(&mut self) {
-        unsafe {
-            #[allow(temporary_cstring_as_ptr)]
-            __llvm_profile_set_filename(
-                std::ffi::CString::new(self.llvm_profile_self_file.to_str().unwrap())
-                    .unwrap()
-                    .as_ptr(),
-            );
-            let r = __llvm_profile_write_file();
-            assert_eq!(r, 0);
-        }
-    }
-}
-
 /// Initializes the difftests environment.
 pub fn init<T: serde::Serialize>(
     desc: TestDesc<T>,
     tmpdir: &Path,
 ) -> std::io::Result<DifftestsEnv> {
-    #[cfg(feature = "enforce-single-running-test")]
+    #[cfg(all(
+        feature = "enforce-single-running-test",
+        not(feature = "parallel-groups")
+    ))]
     let _t_lock = test_lock();
+
+    #[cfg(feature = "parallel-groups")]
+    groups::wr_test_group_inc(None);
 
     if tmpdir.exists() {
         std::fs::remove_dir_all(tmpdir)?;
@@ -139,15 +167,24 @@ pub fn init<T: serde::Serialize>(
     let r = Ok(DifftestsEnv {
         llvm_profile_file_name: "LLVM_PROFILE_FILE".into(),
         llvm_profile_file_value: profraw_path.into(),
-        llvm_profile_self_file: self_profile_file,
+        difftests_env_inner: DifftestsEnvInner::Test {
+            self_profile_drop_writer: SelfProfileWriter {
+                llvm_profile_self_file: self_profile_file,
+            },
 
-        #[cfg(feature = "enforce-single-running-test")]
-        _t_lock,
+            #[cfg(all(
+                feature = "enforce-single-running-test",
+                not(feature = "parallel-groups")
+            ))]
+            _t_lock,
+        },
     });
 
     unsafe {
-        __llvm_profile_reset_counters();
+        llvm_profiling::__llvm_profile_reset_counters();
     }
 
     r
 }
+
+pub mod groups;

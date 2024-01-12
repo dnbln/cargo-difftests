@@ -9,6 +9,9 @@ repository = "https://github.com/dnbln/cargo-difftests"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["cargo-difftests-core/groups"]
+
 [dependencies]
 anyhow.workspace = true
 cargo-difftests-core.workspace = true

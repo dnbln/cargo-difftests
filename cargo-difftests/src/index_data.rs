@@ -162,7 +162,7 @@ impl TestIndex {
             regions: vec![],
             files: vec![],
             test_run: group.mtime().into(),
-            test_desc: group.load_test_descriptions()?,
+            test_desc: vec![],
         };
 
         if index_data_compiler_config.remove_bin_path {

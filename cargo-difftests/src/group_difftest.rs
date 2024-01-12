@@ -1,10 +1,9 @@
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
-    time::SystemTime,
+    time::SystemTime, ffi::OsStr,
 };
 
-use cargo_difftests_core::CoreTestDesc;
+use cargo_difftests_core::{CoreTestDesc, CoreGroupDesc};
 use log::{debug, info, warn};
 
 use crate::{
@@ -36,8 +35,9 @@ impl GroupDifftest {
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct GroupDifftestGroup {
     dir: PathBuf,
-    difftest_list: Vec<GroupDifftest>,
-    main_group_binary: PathBuf,
+    self_json: PathBuf,
+    self_profraw: PathBuf,
+    other_profraws: Vec<PathBuf>,
     other_bin_paths: Vec<PathBuf>,
 
     profdata_file: Option<PathBuf>,
@@ -50,6 +50,12 @@ pub struct GroupDifftestGroup {
 impl GroupDifftestGroup {
     pub fn dir(&self) -> &Path {
         self.dir.as_path()
+    }
+
+    pub fn load_self_json(&self) -> DifftestsResult<CoreGroupDesc> {
+        let desc = std::fs::read_to_string(&self.self_json)?;
+        Ok(serde_json::from_str(&desc)
+            .map_err(|e| DifftestsError::Json(e, Some(self.self_json.clone())))?)
     }
 
     pub fn merge_profraws(&mut self, force: bool) -> DifftestsResult<()> {
@@ -130,17 +136,6 @@ impl GroupDifftestGroup {
         Ok(test_index_data)
     }
 
-    pub fn load_test_descriptions(&self) -> DifftestsResult<Vec<CoreTestDesc>> {
-        let mut test_desc = Vec::new();
-
-        for difftest in &self.difftest_list {
-            let desc = difftest.load_test_desc()?;
-            test_desc.push(desc);
-        }
-
-        Ok(test_desc)
-    }
-
     pub fn clean(&mut self) -> DifftestsResult<()> {
         if self.cleaned {
             return Ok(());
@@ -156,13 +151,6 @@ impl GroupDifftestGroup {
             Ok(())
         }
 
-        for difftest in &mut self.difftest_list {
-            std::fs::write(&difftest.self_profraw, "")?;
-            for profraw in difftest.other_profraws.drain(..) {
-                std::fs::remove_file(profraw)?;
-            }
-        }
-
         clean_file(&mut self.profdata_file)?;
 
         self.cleaned = true;
@@ -175,9 +163,8 @@ impl GroupDifftestGroup {
 
 impl ProfrawsMergeable for GroupDifftestGroup {
     fn list_profraws(&self) -> impl Iterator<Item = &Path> {
-        self.difftest_list
-            .iter()
-            .flat_map(|it| std::iter::once(&it.self_profraw).chain(it.other_profraws.iter()))
+        std::iter::once(&self.self_profraw)
+            .chain(self.other_profraws.iter())
             .map(PathBuf::as_path)
     }
 
@@ -191,10 +178,86 @@ const CLEANED_FILENAME: &str = "group_cleaned";
 
 pub fn index_group(
     dir: PathBuf,
-    ignore_incompatible: bool,
     other_bin_paths: Vec<PathBuf>,
     index_resolver: Option<&DiscoverIndexPathResolver>,
 ) -> DifftestsResult<GroupDifftestGroup> {
+    let mtime = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_GROUP_FIRST_TEST_RUN).metadata()?.modified()?;
+
+    let self_json = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_GROUP_SELF_JSON_FILENAME);
+
+    if !self_json.exists() {
+        return Err(DifftestsError::SelfJsonDoesNotExist(self_json));
+    }
+
+    let self_profraw = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_PROFILE_FILENAME);
+
+    if !self_profraw.exists() {
+        return Err(DifftestsError::SelfProfrawDoesNotExist(self_profraw));
+    }
+
+    let cargo_difftests_version = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_VERSION_FILENAME);
+
+    if !cargo_difftests_version.exists() {
+        return Err(DifftestsError::CargoDifftestsVersionDoesNotExist(
+            cargo_difftests_version,
+        ));
+    }
+
+    let version = std::fs::read_to_string(&cargo_difftests_version)?;
+
+    if version != env!("CARGO_PKG_VERSION") {
+        return Err(DifftestsError::CargoDifftestsVersionMismatch(
+            version,
+            env!("CARGO_PKG_VERSION").to_owned(),
+        ));
+    }
+
+    let mut other_profraws = Vec::new();
+
+    let mut profdata_file = None;
+
+    let mut cleaned = false;
+
+    for e in dir.read_dir()? {
+        let e = e?;
+        let p = e.path();
+
+        if !p.is_file() {
+            continue;
+        }
+
+        let file_name = p.file_name();
+        let ext = p.extension();
+
+        if ext == Some(OsStr::new("profraw"))
+            && file_name
+                != Some(OsStr::new(
+                    cargo_difftests_core::CARGO_DIFFTESTS_SELF_PROFILE_FILENAME,
+                ))
+        {
+            other_profraws.push(p);
+            continue;
+        }
+
+        if ext == Some(OsStr::new("profdata")) {
+            if profdata_file.is_none() {
+                profdata_file = Some(p);
+            } else {
+                warn!(
+                    "multiple profdata files found in difftest directory: {}",
+                    dir.display()
+                );
+                warn!("ignoring: {}", p.display());
+            }
+            continue;
+        }
+
+        if file_name == Some(OsStr::new(CLEANED_FILENAME)) {
+            cleaned = true;
+        }
+    }
+
+
     // we will need the time of the oldest test run, as well as the newest file change, to compare them.
     struct MinSystemTime(SystemTime);
 
@@ -225,47 +288,7 @@ pub fn index_group(
         }
     }
 
-    let (difftests, MinSystemTime(mtime)) =
-        crate::difftest::discover_difftests(&dir, ignore_incompatible, index_resolver)?
-            .into_iter()
-            .filter(|it| it.profdata_file.is_none() && !it.was_cleaned())
-            .map(|it| {
-                let bin_path = it.load_test_desc()?.bin_path;
-                let mtime = it.self_json_mtime()?;
-                Ok((
-                    GroupDifftest {
-                        dir: it.dir,
-                        self_profraw: it.self_profraw,
-                        other_profraws: it.other_profraws,
-                        self_json: it.self_json,
-                        bin_path,
-                    },
-                    mtime,
-                ))
-            })
-            .collect::<DifftestsResult<Vec<_>>>()?
-            .into_iter()
-            .unzip::<GroupDifftest, SystemTime, Vec<_>, MinSystemTime>();
-
-    if difftests.is_empty() {
-        return Err(crate::DifftestsError::EmptyGroup(dir));
-    }
-
-    let main_group_binary = difftests
-        .iter()
-        .map(|it| &it.bin_path)
-        .collect::<HashSet<_>>();
-    if main_group_binary.len() > 1 {
-        return Err(crate::DifftestsError::MultipleMainGroupBinaries(
-            dir,
-            main_group_binary.into_iter().cloned().collect(),
-        ));
-    }
-
-    let main_group_binary = main_group_binary.into_iter().next().unwrap().clone();
-
-    let profdata_file = dir.join(GROUP_PROFDATA_FILENAME);
-    let profdata_file = if profdata_file.exists() {
+    let profdata_file = if let Some(profdata_file) = profdata_file {
         let profdata_mtime = std::fs::metadata(&profdata_file)?.modified()?;
         if profdata_mtime < mtime {
             warn!(
@@ -299,12 +322,11 @@ pub fn index_group(
         None => None,
     };
 
-    let cleaned = dir.join(CLEANED_FILENAME).exists();
-
     Ok(GroupDifftestGroup {
         dir,
-        main_group_binary,
-        difftest_list: difftests,
+        self_json,
+        self_profraw,
+        other_profraws,
         other_bin_paths,
         profdata_file,
         index_data,
@@ -322,7 +344,7 @@ impl ProfDataExportable for GroupDifftestGroup {
     }
 
     fn main_bin_path(&self) -> DifftestsResult<PathBuf> {
-        Ok(self.main_group_binary.clone())
+        self.load_self_json().map(|desc| desc.bin_path)
     }
 
     fn other_bins(&self) -> impl Iterator<Item = &Path> {

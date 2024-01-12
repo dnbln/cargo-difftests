@@ -483,10 +483,7 @@ pub enum App {
     /// Treats all the difftests found in the given directory as a single
     /// group, and analyzes them together.
     AnalyzeGroup {
-        /// The root directory where all the difftests were stored.
-        ///
-        /// This should be some common ancestor directory of all
-        /// the paths passed to `cargo_difftests_testclient::init`.
+        /// The root directory where the difftest group wes stored.
         #[clap(long, default_value = "target/tmp/cargo-difftests")]
         dir: PathBuf,
         /// Whether to force the generation of intermediary files.
@@ -501,12 +498,6 @@ pub enum App {
         other_binaries: OtherBinaries,
         #[clap(flatten)]
         analysis_index: AnalysisIndex,
-        /// With this flag, `cargo-difftests` will ignore any incompatible difftest and continue.
-        ///
-        /// Without this flag, when `cargo-difftests` finds an
-        /// incompatible difftest on-disk, it will fail.
-        #[clap(long)]
-        ignore_incompatible: bool,
         /// The root directory where all the difftests were stored.
         ///
         /// Needs to be known to be able to properly remap the paths
@@ -1167,13 +1158,11 @@ fn main_impl() -> CargoDifftestsResult {
             algo,
             other_binaries,
             analysis_index,
-            ignore_incompatible,
             root,
         } => {
             let resolver = analysis_index.index_resolver(root)?;
             let mut group = cargo_difftests::group_difftest::index_group(
                 dir,
-                ignore_incompatible,
                 other_binaries.other_binaries,
                 resolver.as_ref(),
             )?;

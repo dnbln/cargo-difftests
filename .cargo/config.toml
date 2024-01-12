@@ -1,0 +1,17 @@
+# .cargo/config.toml
+
+[profile.difftests]
+inherits = "dev"
+rustflags = [
+  "--cfg", "cargo_difftests", # Enable the cargo_difftests cfg.
+]
+
+[build]
+rustc-wrapper = "rustc-wrapper-difftests"
+rustc-workspace-wrapper = "rustc-wrapper-difftests-workspace"
+
+[env]
+RUST_TEST_THREADS = "1"
+
+[unstable]
+profile-rustflags = true

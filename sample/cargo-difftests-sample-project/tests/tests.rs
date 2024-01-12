@@ -8,6 +8,7 @@ type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
 #[cfg(not(cargo_difftests))]
 type DifftestsEnv = ();
 
+#[cfg(cargo_difftests)]
 #[derive(serde::Serialize, Clone)]
 struct ExtraArgs {
     pkg_name: String,
@@ -63,6 +64,33 @@ fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
     }
 }
 
+#[cfg(cargo_difftests)]
+#[derive(serde::Serialize, Clone)]
+struct GroupDataExtra;
+
+#[cfg(cargo_difftests)]
+fn get_group_meta(
+    group_name: cargo_difftests_testclient::groups::GroupName,
+) -> cargo_difftests_testclient::groups::GroupMeta<GroupDataExtra> {
+    cargo_difftests_testclient::groups::GroupMeta {
+        bin_path: std::env::current_exe().unwrap(),
+        temp_dir: std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+            .join("cargo-difftests")
+            .join("groups")
+            .join(group_name.as_str()),
+        name: group_name,
+        extra: GroupDataExtra,
+    }
+}
+
+pub fn setup_difftests_group(group_name: &'static str) -> DifftestsEnv {
+    #[cfg(cargo_difftests)]
+    {
+        cargo_difftests_testclient::groups::init_group(group_name.into(), get_group_meta)
+            .unwrap()
+    }
+}
+
 #[test]
 fn test_add() {
     let _env = setup_difftests("simple", "test_add");
@@ -79,21 +107,21 @@ fn test_sub() {
 
 #[test]
 fn test_mul() {
-    let _env = setup_difftests("advanced", "test_mul");
+    let _env = setup_difftests_group("advanced");
     std::thread::sleep(std::time::Duration::from_millis(1000));
     assert_eq!(mul(2, 3), 6);
 }
 
 #[test]
 fn test_div() {
-    let _env = setup_difftests("advanced", "test_div");
+    let _env = setup_difftests_group("advanced");
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert_eq!(div(6, 3), Some(2));
 }
 
 #[test]
 fn test_div_2() {
-    let _env = setup_difftests("advanced", "test_div_2");
+    let _env = setup_difftests_group("advanced");
     std::thread::sleep(std::time::Duration::from_millis(10));
     assert_eq!(div(6, 0), None);
 }

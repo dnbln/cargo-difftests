@@ -10,8 +10,10 @@ repository = "https://github.com/dnbln/cargo-difftests"
 rustc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["enforce-single-running-test"]
+default = ["enforce-single-running-test", "groups", "parallel-groups"]
 enforce-single-running-test = []
+groups = ["enforce-single-running-test", "cargo-difftests-core/groups"]
+parallel-groups = ["groups"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
