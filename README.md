@@ -9,23 +9,23 @@
 
 ## Prerequisites
 
+- Nightly rust.
 - [`cargo-binutils`](https://github.com/rust-embedded/cargo-binutils)
 - Optionally, `cargo install rustc-wrapper-difftests`, to only emit
 coverage information for crates within the workspace. See [rustc-wrapper-difftests](#rustc-wrapper-difftests) for more.
 
-## Recommended setup
+## Recommended setup (with `cargo-generate`)
 
-The recommended way to setup a project is to use the `cargo-generate`
-template, so if you don't have `cargo-generate`, install it first:
+Full guide available on [the documentation site](https://difftests.dnbln.dev/setup-with-cargo-generate.html),
+but in short:
 
 ```bash
-cargo install cargo-generate
+cargo install cargo-generate # if you don't have it already
 ```
 
-And now everything left to do is run `cargo-generate` to generate a
-project for us.
+Then just apply the template:
 
-```
+```bash
 cargo generate dnbln/cargo-difftests cargo-generate-templates/cargo-difftests-sample-project -d internal=false
 ```
 
@@ -35,9 +35,6 @@ when running tests, which can be done like:
 ```rust
 cargo t --profile difftests
 ```
-
-Refer to the [`testclient`](#cargo-difftests-testclient) section for
-what you have to keep in mind while writing tests.
 
 A simple use of the `cargo difftests` now is as follows (in the template repository):
 
@@ -63,58 +60,13 @@ clean
 
 Now it's highly recommended to setup another binary to actually run those tests,
 which would invoke `cargo-difftests` (preferably the `analyze-all` subcommand),
-and use its output to rerun the tests if needed.
+and use its output to rerun the tests if needed. A full guide on how to do that is
+available [here](https://difftests.dnbln.dev/use-with-analyze-all.html)
 
 ## Manual setup
 
-### Cargo config setup
-
-First, before we are able to do anything, we need a special profile
-to output the coverage information, as well as a flag to enable the
-library, so it's not enabled by mistake. Go ahead and copy the
-following to your `.cargo/config.toml`:
-
-```toml
-# .cargo/config.toml
-
-# Do either one of the following:
-# 1. Uncomment the line in rustflags to use the `-C instrument-coverage` flag.
-# 2. (Recommended) Uncomment the lines for `build.rustc-wrapper` and `build.rustc-workspace-wrapper`
-# to use the `rustc-wrapper-difftests` wrapper.
-# This will enable instrumentation-based code coverage before calling rustc,
-# but it does so only for workspace packages.
-# This has the effect that the code coverage is only computed for the workspace
-# packages, and not for the dependencies.
-# This option is recommended because it is faster and produces less output.
-#
-# It never adds the `-C instrument-coverage` flag to the rustflags if
-# `--cfg cargo_difftests` is not specified, or if it was specified already.
-
-
-[profile.difftests]
-inherits = "dev"
-rustflags = [
-  # Uncomment the following line to use instrumentation-based code coverage.
-  # (option 1 above).
-  #
-  # "-C", "instrument-coverage", # Enable instrumentation-based code coverage
-  "--cfg", "cargo_difftests", # Enable the cargo_difftests cfg.
-]
-
-# Uncomment the following lines to use instrumentation-based code coverage
-# (option 2 above).
-#
-# [build]
-# rustc-wrapper = "rustc-wrapper-difftests"
-# rustc-workspace-wrapper = "rustc-wrapper-difftests-workspace"
-
-[env]
-RUST_TEST_THREADS = "1" # we need this for profiling to work properly
-# see comments on multithreading below
-
-[unstable]
-profile-rustflags = true
-```
+Manual configuration is a bit harder, so
+[a full guide on how to do this is available on the documentation site](https://difftests.dnbln.dev/manual-setup.html).
 
 ## Components
 
