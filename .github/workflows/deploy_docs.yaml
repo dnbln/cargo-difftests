@@ -96,6 +96,9 @@ jobs:
             - name: Setup Pages
               uses: actions/configure-pages@v2
 
+            - name: Print out Manual-setup (2)
+              run: cat dir/manual-setup.html
+
             - name: Upload artifact
               uses: actions/upload-pages-artifact@v1
               with:
