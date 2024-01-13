@@ -27,7 +27,7 @@ jobs:
                 docker-version: ${{ env.WS_DOCKER_VERSION }}
 
             - name: Upload documentation
-              uses: actions/upload-artifact@v3
+              uses: actions/upload-artifact@v4
               with:
                 name: docs
                 path: |
@@ -37,7 +37,7 @@ jobs:
 
 # Add the step below to upload Algolia indexes
             - name: Upload algolia-indexes
-              uses: actions/upload-artifact@v3
+              uses: actions/upload-artifact@v4
               with:
                 name: algolia-indexes
                 path: artifacts/${{ env.ALGOLIA_ARTIFACT }}
@@ -49,7 +49,7 @@ jobs:
 
         steps:
             - name: Download artifacts
-              uses: actions/download-artifact@v1
+              uses: actions/download-artifact@v4
               with:
                 name: docs
                 path: artifacts
@@ -60,7 +60,7 @@ jobs:
                 mkdir ws_artifacts
                 unzip $WS_ARTIFACT -d ws_artifacts
             - name: Upload to github pages
-              uses: actions/upload-pages-artifact@v2
+              uses: actions/upload-pages-artifact@v3
               with:
                 path: artifacts/ws_artifacts
 
@@ -72,7 +72,7 @@ jobs:
 
         steps:
             - name: Download artifacts
-              uses: actions/download-artifact@v1
+              uses: actions/download-artifact@v4
               with:
                 name: docs
                 path: artifacts
