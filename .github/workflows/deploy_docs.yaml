@@ -91,7 +91,7 @@ jobs:
               run: unzip -O UTF-8 -qq ${{ env.ARTIFACT }} -d dir
             
             - name: Print out Manual-setup
-              run: cat dir/Manual-setup.html
+              run: cat dir/manual-setup.html
 
             - name: Setup Pages
               uses: actions/configure-pages@v2
