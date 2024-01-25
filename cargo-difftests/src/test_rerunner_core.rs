@@ -10,7 +10,7 @@ pub struct TestRerunnerInvocation {
 
 impl TestRerunnerInvocation {
     pub fn create_invocation_from<'a>(
-        iter: impl IntoIterator<Item = &'a AnalyzeAllSingleTestGroup>
+        iter: impl IntoIterator<Item = &'a AnalyzeAllSingleTestGroup>,
     ) -> DifftestsResult<Self> {
         let mut tests = vec![];
         let mut groups = vec![];
@@ -20,6 +20,11 @@ impl TestRerunnerInvocation {
                 tests.push(difftest.load_test_desc()?);
             } else if let Some(difftest_group) = &g.difftest_group {
                 groups.push(difftest_group.load_self_json()?);
+            } else {
+                // Most likely came from an index.
+                assert_eq!(g.test_desc.len(), 1);
+                let [test] = g.test_desc.as_slice() else { unreachable!() };
+                tests.push(test.clone());
             }
         }
 

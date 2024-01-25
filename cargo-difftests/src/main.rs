@@ -1207,8 +1207,7 @@ pub fn run_analyze_all_from_index(
         results.push(result);
     }
 
-    let out_json = serde_json::to_string(&results)?;
-    println!("{out_json}");
+    action_args.perform_for(&results)?;
 
     Ok(())
 }
