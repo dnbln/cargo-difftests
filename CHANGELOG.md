@@ -1,3 +1,17 @@
+# Unreleased
+
+## Major features
+
+### Dirty test rerunners
+
+Basically executables that get invoked to rerun the tests which
+are considered `Dirty`, together with a default impl for really
+basic `cargo test`.
+
+## Other changes
+
+- Move `rustc-wrapper-difftests` binaries into `cargo-difftests` package.
+
 # 0.4.0
 
 Released: 2023-01-10

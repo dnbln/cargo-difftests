@@ -15,11 +15,10 @@ struct ExtraArgs {
     crate_name: String,
     bin_name: Option<String>,
     test_name: String,
-    group_name: String,
 }
 
 #[must_use]
-fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
+fn setup_difftests(test_name: &str) -> DifftestsEnv {
     #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty
     // without this cfg
     {
@@ -28,7 +27,6 @@ fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
         // `--dir` option.
         let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
             .join("cargo-difftests")
-            .join(group)
             .join(test_name);
         let difftests_env = cargo_difftests_testclient::init(
             cargo_difftests_testclient::TestDesc::<ExtraArgs> {
@@ -47,7 +45,6 @@ fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
                     crate_name: env!("CARGO_CRATE_NAME").to_string(),
                     bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
                     test_name: test_name.to_string(),
-                    group_name: group.to_string(),
                 },
             },
             &tmpdir,
@@ -86,21 +83,20 @@ fn get_group_meta(
 pub fn setup_difftests_group(group_name: &'static str) -> DifftestsEnv {
     #[cfg(cargo_difftests)]
     {
-        cargo_difftests_testclient::groups::init_group(group_name.into(), get_group_meta)
-            .unwrap()
+        cargo_difftests_testclient::groups::init_group(group_name.into(), get_group_meta).unwrap()
     }
 }
 
 #[test]
 fn test_add() {
-    let _env = setup_difftests("simple", "test_add");
+    let _env = setup_difftests("test_add");
     std::thread::sleep(std::time::Duration::from_millis(400));
     assert_eq!(add(1, 2), 3);
 }
 
 #[test]
 fn test_sub() {
-    let _env = setup_difftests("simple", "test_sub");
+    let _env = setup_difftests("test_sub");
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert_eq!(sub(3, 2), 1);
 }

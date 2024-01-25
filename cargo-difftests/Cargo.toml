@@ -26,4 +26,17 @@ pretty_env_logger.workspace = true
 rustc-demangle.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
+
+[[bin]]
+name = "rustc-wrapper-difftests"
+path = "src/bin/rustc-wrapper-difftests.rs"
+
+[[bin]]
+name = "rustc-wrapper-difftests-workspace"
+path = "src/bin/rustc-wrapper-difftests-workspace.rs"
+
+[[bin]]
+name = "cargo-difftests-default-rerunner"
+path = "src/bin/cargo-difftests-default-rerunner.rs"

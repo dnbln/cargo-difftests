@@ -27,8 +27,9 @@ use crate::index_data::TestIndex;
 pub mod analysis;
 pub mod analysis_data;
 pub mod difftest;
-pub mod index_data;
 pub mod group_difftest;
+pub mod index_data;
+pub mod test_rerunner_core;
 
 /// Errors that can occur when running `cargo difftests`.
 #[derive(thiserror::Error, Debug)]

@@ -14,8 +14,12 @@
  *    limitations under the License.
  */
 
+#![feature(exit_status_error)]
+
+use core::fmt;
 use std::fmt::{Display, Formatter};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
@@ -26,7 +30,7 @@ use cargo_difftests::difftest::{Difftest, DiscoverIndexPathResolver, ExportProfd
 use cargo_difftests::group_difftest::GroupDifftestGroup;
 use cargo_difftests::index_data::{IndexDataCompilerConfig, TestIndex};
 use cargo_difftests::{
-    AnalyzeAllSingleTestGroup, IndexCompareDifferences, TouchSameFilesDifference,
+    AnalysisVerdict, AnalyzeAllSingleTestGroup, IndexCompareDifferences, TouchSameFilesDifference,
 };
 use clap::{Args, Parser, ValueEnum};
 use log::warn;
@@ -435,6 +439,88 @@ impl ExportProfdataConfigFlags {
     }
 }
 
+#[derive(ValueEnum, Debug, Clone, Copy, Default)]
+pub enum AnalyzeAllActionKind {
+    /// Print the report to stdout.
+    #[default]
+    #[clap(name = "print")]
+    Print,
+    /// Assert that all the tests are clean.
+    ///
+    /// If any of them is dirty, the program will exit with a non-zero exit code.
+    #[clap(name = "assert-clean")]
+    AssertClean,
+    /// Rerun all the dirty tests.
+    #[clap(name = "rerun-dirty")]
+    RerunDirty,
+}
+
+impl fmt::Display for AnalyzeAllActionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AnalyzeAllActionKind::Print => write!(f, "print"),
+            AnalyzeAllActionKind::AssertClean => write!(f, "assert-clean"),
+            AnalyzeAllActionKind::RerunDirty => write!(f, "rerun-dirty"),
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct RerunRunner {
+    /// The runner to use for the `rerun-dirty` action.
+    #[clap(default_value = "cargo-difftests-default-rerunner")]
+    runner: PathBuf,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct AnalyzeAllActionArgs {
+    /// The action to take for the report.
+    #[clap(long, default_value_t = Default::default())]
+    action: AnalyzeAllActionKind,
+    #[clap(flatten)]
+    runner: RerunRunner,
+}
+
+impl AnalyzeAllActionArgs {
+    fn perform_for(&self, results: &[AnalyzeAllSingleTestGroup]) -> CargoDifftestsResult {
+        match self.action {
+            AnalyzeAllActionKind::Print => {
+                let out_json = serde_json::to_string(&results)?;
+                println!("{out_json}");
+            }
+            AnalyzeAllActionKind::AssertClean => {
+                let dirty = results.iter().any(|r| r.verdict == AnalysisVerdict::Dirty);
+
+                if dirty {
+                    bail!("some tests are dirty")
+                }
+            }
+            AnalyzeAllActionKind::RerunDirty => {
+                let invocation =
+                    cargo_difftests::test_rerunner_core::TestRerunnerInvocation::create_invocation_from(
+                        results
+                        .iter()
+                        .filter(|r| r.verdict == AnalysisVerdict::Dirty)
+                    )?;
+
+                let invocation_str = serde_json::to_string(&invocation)?;
+
+                let mut invocation_file = tempfile::NamedTempFile::new()?;
+                write!(&mut invocation_file, "{}", invocation_str)?;
+                invocation_file.flush()?;
+
+                let mut cmd = std::process::Command::new(&self.runner.runner);
+                cmd.arg(invocation_file.path());
+
+                let status = cmd.status()?;
+
+                status.exit_ok()?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Parser, Debug)]
 pub enum App {
     /// Discover the difftests from a given directory.
@@ -537,6 +623,8 @@ pub enum App {
         /// incompatible difftest on-disk, it will fail.
         #[clap(long)]
         ignore_incompatible: bool,
+        #[clap(flatten)]
+        action_args: AnalyzeAllActionArgs,
     },
     /// Analyze all the difftests in a given directory, using their index files.
     ///
@@ -550,6 +638,8 @@ pub enum App {
         index_root: PathBuf,
         #[clap(flatten)]
         algo: AlgoArgs,
+        #[clap(flatten)]
+        action_args: AnalyzeAllActionArgs,
     },
     LowLevel {
         #[clap(subcommand)]
@@ -1029,6 +1119,7 @@ pub fn run_analyze_all(
     export_profdata_config_flags: ExportProfdataConfigFlags,
     analysis_index: AnalysisIndex,
     ignore_incompatible: bool,
+    action_args: AnalyzeAllActionArgs,
 ) -> CargoDifftestsResult {
     let resolver = analysis_index.index_resolver(Some(dir.clone()))?;
     let discovered =
@@ -1057,8 +1148,7 @@ pub fn run_analyze_all(
         results.push(result);
     }
 
-    let out_json = serde_json::to_string(&results)?;
-    println!("{out_json}");
+    action_args.perform_for(&results)?;
 
     Ok(())
 }
@@ -1086,6 +1176,7 @@ pub fn run_analyze_all_from_index(
     index_root: PathBuf,
     algo: DirtyAlgorithm,
     commit: Option<git2::Oid>,
+    action_args: AnalyzeAllActionArgs,
 ) -> CargoDifftestsResult {
     let indexes = {
         let mut indexes = vec![];
@@ -1185,6 +1276,7 @@ fn main_impl() -> CargoDifftestsResult {
             export_profdata_config_flags,
             analysis_index,
             ignore_incompatible,
+            action_args,
         } => {
             run_analyze_all(
                 dir,
@@ -1194,13 +1286,15 @@ fn main_impl() -> CargoDifftestsResult {
                 export_profdata_config_flags,
                 analysis_index,
                 ignore_incompatible,
+                action_args,
             )?;
         }
         App::AnalyzeAllFromIndex {
             index_root,
             algo: AlgoArgs { algo, commit },
+            action_args,
         } => {
-            run_analyze_all_from_index(index_root, algo, commit)?;
+            run_analyze_all_from_index(index_root, algo, commit, action_args)?;
         }
         App::LowLevel { cmd } => {
             run_low_level_cmd(cmd)?;
