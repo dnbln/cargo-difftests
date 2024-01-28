@@ -22,7 +22,7 @@ edge cases to this, it is generally true for most crates out there.
 
 ## Recommended setup (with `cargo-generate`)
 
-Full guide available on [the documentation site](https://difftests.dnbln.dev/setup-with-cargo-generate.html),
+Full guide available on [the documentation site](https://dnbln.github.io/cargo-difftests/setup-with-cargo-generate.html),
 but in short:
 
 ```bash
@@ -67,12 +67,12 @@ clean
 Now it's highly recommended to setup another binary to actually run those tests,
 which would invoke `cargo-difftests` (preferably the `analyze-all` subcommand),
 and use its output to rerun the tests if needed. A full guide on how to do that is
-available [here](https://difftests.dnbln.dev/use-with-analyze-all.html)
+available [here](https://dnbln.github.io/cargo-difftests/use-with-analyze-all.html)
 
 ## Manual setup
 
 Manual configuration is a bit harder, so
-[a full guide on how to do this is available on the documentation site](https://difftests.dnbln.dev/manual-setup.html).
+[a full guide on how to do this is available on the documentation site](https://dnbln.github.io/cargo-difftests/manual-setup.html).
 
 ## Components
 
