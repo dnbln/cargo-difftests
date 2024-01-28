@@ -18,7 +18,7 @@
 //! the analysis of a difftest, or a test index.
 //!
 //! The [`AnalysisContext`] can be obtained by calling any of the following:
-//! - [`HasExportedProfdata::start_analysis`](super::HasExportedProfdata::start_analysis)
+//! - [`Difftest::start_analysis`](super::Difftest::start_analysis)
 //! - [`AnalysisContext::from_index`]
 //! - [`AnalysisContext::with_index_from`]
 //! - [`AnalysisContext::with_index_from_difftest`]
