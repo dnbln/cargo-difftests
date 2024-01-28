@@ -517,6 +517,10 @@ impl AnalyzeAllActionArgs {
                         .filter(|r| r.verdict == AnalysisVerdict::Dirty)
                     )?;
 
+                if invocation.is_empty() {
+                    return Ok(());
+                }
+
                 let invocation_str = serde_json::to_string(&invocation)?;
 
                 let mut invocation_file = tempfile::NamedTempFile::new()?;
@@ -524,7 +528,10 @@ impl AnalyzeAllActionArgs {
                 invocation_file.flush()?;
 
                 let mut cmd = std::process::Command::new(&self.runner.runner);
-                cmd.arg(invocation_file.path());
+                cmd.arg(invocation_file.path()).env(
+                    cargo_difftests::test_rerunner_core::CARGO_DIFFTESTS_VER_NAME,
+                    env!("CARGO_PKG_VERSION"),
+                );
 
                 let status = cmd.status()?;
 

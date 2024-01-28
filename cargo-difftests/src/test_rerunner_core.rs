@@ -31,6 +31,10 @@ impl TestRerunnerInvocation {
         Ok(Self { tests, groups })
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.tests.is_empty() && self.groups.is_empty()
+    }
+
     pub fn tests(&self) -> &[CoreTestDesc] {
         &self.tests
     }
@@ -40,7 +44,27 @@ impl TestRerunnerInvocation {
     }
 }
 
+pub const CARGO_DIFFTESTS_VER_NAME: &str = "CARGO_DIFFTESTS_VER";
+
 pub fn read_invocation_from_command_line() -> std::io::Result<TestRerunnerInvocation> {
+    let v = std::env::var(CARGO_DIFFTESTS_VER_NAME).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("missing env var: {}", e),
+        )
+    })?;
+
+    if v != env!("CARGO_PKG_VERSION") {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "version mismatch: expected {} (our version), got {} (cargo-difftests version)",
+                env!("CARGO_PKG_VERSION"),
+                v
+            ),
+        ));
+    }
+
     let mut args = std::env::args().skip(1);
 
     let f = args.next().ok_or_else(|| {
