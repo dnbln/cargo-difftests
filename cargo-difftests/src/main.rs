@@ -19,8 +19,9 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{bail, Context};
 use cargo_difftests::analysis::{
@@ -29,16 +30,22 @@ use cargo_difftests::analysis::{
 use cargo_difftests::difftest::{Difftest, DiscoverIndexPathResolver, ExportProfdataConfig};
 use cargo_difftests::group_difftest::GroupDifftestGroup;
 use cargo_difftests::index_data::{IndexDataCompilerConfig, IndexSize, TestIndex};
+use cargo_difftests::test_rerunner_core::State as TestRunnerState;
 use cargo_difftests::{
     AnalysisVerdict, AnalyzeAllSingleTestGroup, IndexCompareDifferences, TouchSameFilesDifference,
 };
 use clap::{Args, Parser, ValueEnum};
-use log::warn;
+use log::{info, warn};
+use prodash::render::line;
+use prodash::tree::Root as Tree;
+use prodash::unit;
 
 #[derive(Args, Debug)]
 pub struct ExportProfdataCommand {
     #[clap(flatten)]
     export_profdata_config_flags: ExportProfdataConfigFlags,
+    #[clap(flatten)]
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 }
 
 #[derive(ValueEnum, Debug, Copy, Clone)]
@@ -60,8 +67,6 @@ impl Display for FlattenFilesTarget {
 
 #[derive(Args, Debug, Copy, Clone)]
 pub struct CompileTestIndexFlags {
-    #[clap(flatten)]
-    ignore_cargo_registry: IgnoreRegistryFilesFlag,
     /// Whether to flatten all files to a directory.
     #[clap(long)]
     flatten_files_to: Option<FlattenFilesTarget>,
@@ -73,7 +78,7 @@ pub struct CompileTestIndexFlags {
     #[clap(
         long = "no-remove-bin-path",
         default_value_t = true,
-        action(clap::ArgAction::SetFalse)
+        action = clap::ArgAction::SetFalse,
     )]
     remove_bin_path: bool,
     /// Whether to generate a full index, or a tiny index.
@@ -96,7 +101,7 @@ pub struct CompileTestIndexFlags {
     #[clap(
         long = "no-path-slash-replace",
         default_value_t = true,
-        action(clap::ArgAction::SetFalse)
+        action = clap::ArgAction::SetFalse,
     )]
     path_slash_replace: bool,
 }
@@ -104,9 +109,6 @@ pub struct CompileTestIndexFlags {
 impl Default for CompileTestIndexFlags {
     fn default() -> Self {
         Self {
-            ignore_cargo_registry: IgnoreRegistryFilesFlag {
-                ignore_registry_files: true,
-            },
             flatten_files_to: Some(FlattenFilesTarget::RepoRoot),
             remove_bin_path: true,
             full_index: false,
@@ -206,6 +208,8 @@ pub enum LowLevelCommand {
         export_profdata_config_flags: ExportProfdataConfigFlags,
         #[clap(flatten)]
         compile_test_index_flags: CompileTestIndexFlags,
+        #[clap(flatten)]
+        ignore_registry_files: IgnoreRegistryFilesFlag,
     },
     /// Runs the analysis for a single test index.
     RunAnalysisWithTestIndex {
@@ -431,7 +435,7 @@ pub struct IgnoreRegistryFilesFlag {
     #[clap(
         long = "no-ignore-registry-files",
         default_value_t = true,
-        action(clap::ArgAction::SetFalse)
+        action = clap::ArgAction::SetFalse,
     )]
     ignore_registry_files: bool,
 }
@@ -439,15 +443,13 @@ pub struct IgnoreRegistryFilesFlag {
 #[derive(Args, Debug, Clone)]
 pub struct ExportProfdataConfigFlags {
     #[clap(flatten)]
-    ignore_registry_files: IgnoreRegistryFilesFlag,
-    #[clap(flatten)]
     other_binaries: OtherBinaries,
 }
 
 impl ExportProfdataConfigFlags {
-    fn config(&self) -> ExportProfdataConfig {
+    fn config(&self, ignore_registry_files: IgnoreRegistryFilesFlag) -> ExportProfdataConfig {
         ExportProfdataConfig {
-            ignore_registry_files: self.ignore_registry_files.ignore_registry_files,
+            ignore_registry_files: ignore_registry_files.ignore_registry_files,
             other_binaries: self.other_binaries.other_binaries.clone(),
         }
     }
@@ -496,7 +498,11 @@ pub struct AnalyzeAllActionArgs {
 }
 
 impl AnalyzeAllActionArgs {
-    fn perform_for(&self, results: &[AnalyzeAllSingleTestGroup]) -> CargoDifftestsResult {
+    fn perform_for(
+        &self,
+        ctxt: &CargoDifftestsContext,
+        results: &[AnalyzeAllSingleTestGroup],
+    ) -> CargoDifftestsResult {
         match self.action {
             AnalyzeAllActionKind::Print => {
                 let out_json = serde_json::to_string(&results)?;
@@ -514,12 +520,15 @@ impl AnalyzeAllActionArgs {
                     cargo_difftests::test_rerunner_core::TestRerunnerInvocation::create_invocation_from(
                         results
                         .iter()
-                        .filter(|r| r.verdict == AnalysisVerdict::Dirty)
+                        .filter(|r| r.verdict == AnalysisVerdict::Dirty),
                     )?;
 
                 if invocation.is_empty() {
                     return Ok(());
                 }
+
+                let mut pb = ctxt.shell.tree.add_child("Rerunning dirty tests");
+                pb.init(Some(1), Some(unit::label("test sets")));
 
                 let invocation_str = serde_json::to_string(&invocation)?;
 
@@ -528,14 +537,79 @@ impl AnalyzeAllActionArgs {
                 invocation_file.flush()?;
 
                 let mut cmd = std::process::Command::new(&self.runner.runner);
-                cmd.arg(invocation_file.path()).env(
-                    cargo_difftests::test_rerunner_core::CARGO_DIFFTESTS_VER_NAME,
-                    env!("CARGO_PKG_VERSION"),
-                );
+                cmd.arg(invocation_file.path())
+                    .env(
+                        cargo_difftests::test_rerunner_core::CARGO_DIFFTESTS_VER_NAME,
+                        env!("CARGO_PKG_VERSION"),
+                    )
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped());
 
-                let status = cmd.status()?;
+                let mut child = cmd.spawn()?;
 
-                status.exit_ok()?;
+                let mut stdout_child = child.stdout.take().unwrap();
+                let mut stderr_child = child.stderr.take().unwrap();
+
+                let tests = pb.add_child("Tests");
+                let handle = std::thread::spawn(move || {
+                    let mut tests = tests;
+                    let mut tests_initialized = false;
+                    for line in std::io::BufReader::new(&mut stdout_child).lines() {
+                        let line = line?;
+                        if line.starts_with("cargo-difftests-test-counts::") {
+                            let l = line.trim_start_matches("cargo-difftests-test-counts::");
+                            let counts: TestRunnerState = serde_json::from_str(l)?;
+                            match counts {
+                                TestRunnerState::None => {}
+                                TestRunnerState::Running {
+                                    current_test_count,
+                                    total_test_count,
+                                } => {
+                                    if !tests_initialized {
+                                        tests.init(
+                                            Some(total_test_count),
+                                            Some(unit::label("tests")),
+                                        );
+                                        tests_initialized = true;
+                                    }
+
+                                    tests.set(current_test_count);
+                                }
+                                TestRunnerState::Done => {
+                                    tests.done("Tests are done");
+                                }
+                                TestRunnerState::Error => {
+                                    tests.fail("Tests failed");
+                                }
+                            }
+                        } else {
+                            info!("rerun stdout: {line}");
+                        }
+                    }
+
+                    Ok::<_, anyhow::Error>(())
+                });
+
+                let status = child.wait()?;
+
+                handle.join().unwrap()?;
+
+                for line in std::io::BufReader::new(&mut stderr_child).lines() {
+                    let line = line?;
+                    info!("rerun stderr: {line}");
+                }
+
+                pb.inc();
+
+                match status.exit_ok() {
+                    Ok(()) => {
+                        pb.done("Rerun successful");
+                    }
+                    Err(e) => {
+                        pb.fail("Rerun failed");
+                        bail!(e);
+                    }
+                }
             }
         }
         Ok(())
@@ -586,6 +660,9 @@ pub enum App {
         /// `if-available`.
         #[clap(long, default_value = "target/tmp/cargo-difftests")]
         root: Option<PathBuf>,
+
+        #[clap(flatten)]
+        ignore_registry_files: IgnoreRegistryFilesFlag,
     },
     /// Treats all the difftests found in the given directory as a single
     /// group, and analyzes them together.
@@ -613,6 +690,9 @@ pub enum App {
         /// `if-available`.
         #[clap(long, default_value = "target/tmp/cargo-difftests")]
         root: Option<PathBuf>,
+
+        #[clap(flatten)]
+        ignore_registry_files: IgnoreRegistryFilesFlag,
     },
     /// Analyze all the difftests in a given directory.
     ///
@@ -625,6 +705,8 @@ pub enum App {
         /// the paths passed to `cargo_difftests_testclient::init`.
         #[clap(long, default_value = "target/tmp/cargo-difftests")]
         dir: PathBuf,
+        #[clap(flatten)]
+        ignore_registry_files: IgnoreRegistryFilesFlag,
         /// Whether to force the generation of intermediary files.
         ///
         /// Without this flag, if the intermediary files are already present,
@@ -712,6 +794,7 @@ fn discover_difftests(
 }
 
 fn run_discover_difftests(
+    ctxt: &CargoDifftestsContext,
     dir: PathBuf,
     index_root: Option<PathBuf>,
     ignore_incompatible: bool,
@@ -740,7 +823,10 @@ fn run_export_profdata(dir: PathBuf, cmd: ExportProfdataCommand) -> CargoDifftes
         bail!("difftest directory does not have a .profdata file");
     }
 
-    let coverage = discovered.export_profdata(cmd.export_profdata_config_flags.config())?;
+    let coverage = discovered.export_profdata(
+        cmd.export_profdata_config_flags
+            .config(cmd.ignore_registry_files),
+    )?;
 
     let s = serde_json::to_string(&coverage)?;
 
@@ -805,6 +891,7 @@ fn run_analysis_with_test_index(
 
 fn compile_test_index_config(
     compile_test_index_flags: CompileTestIndexFlags,
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 ) -> CargoDifftestsResult<IndexDataCompilerConfig> {
     let flatten_root = match compile_test_index_flags.flatten_files_to {
         Some(FlattenFilesTarget::RepoRoot) => {
@@ -838,11 +925,7 @@ fn compile_test_index_config(
             p
         }),
         accept_file: Box::new(move |path| {
-            if compile_test_index_flags
-                .ignore_cargo_registry
-                .ignore_registry_files
-                && file_is_from_cargo_registry(path)
-            {
+            if ignore_registry_files.ignore_registry_files && file_is_from_cargo_registry(path) {
                 return false;
             }
 
@@ -864,14 +947,17 @@ fn run_compile_test_index(
     output: PathBuf,
     export_profdata_config_flags: ExportProfdataConfigFlags,
     compile_test_index_flags: CompileTestIndexFlags,
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 ) -> CargoDifftestsResult {
     let discovered = Difftest::discover_from(dir, None)?;
     assert!(discovered.has_profdata());
 
-    let config = compile_test_index_config(compile_test_index_flags)?;
+    let config = compile_test_index_config(compile_test_index_flags, ignore_registry_files)?;
 
-    let result =
-        discovered.compile_test_index_data(export_profdata_config_flags.config(), config)?;
+    let result = discovered.compile_test_index_data(
+        export_profdata_config_flags.config(ignore_registry_files),
+        config,
+    )?;
 
     result.write_to_file(&output)?;
 
@@ -893,7 +979,7 @@ fn run_indexes_touch_same_files_report(
     Ok(())
 }
 
-fn run_low_level_cmd(cmd: LowLevelCommand) -> CargoDifftestsResult {
+fn run_low_level_cmd(ctxt: &CargoDifftestsContext, cmd: LowLevelCommand) -> CargoDifftestsResult {
     match cmd {
         LowLevelCommand::MergeProfdata { dir, force } => {
             run_merge_profdata(dir.dir, force)?;
@@ -912,12 +998,14 @@ fn run_low_level_cmd(cmd: LowLevelCommand) -> CargoDifftestsResult {
             output,
             export_profdata_config_flags,
             compile_test_index_flags,
+            ignore_registry_files,
         } => {
             run_compile_test_index(
                 dir.dir,
                 output,
                 export_profdata_config_flags,
                 compile_test_index_flags,
+                ignore_registry_files,
             )?;
         }
         LowLevelCommand::RunAnalysisWithTestIndex {
@@ -946,12 +1034,13 @@ fn analyze_single_test(
     export_profdata_config_flags: ExportProfdataConfigFlags,
     analysis_index: &AnalysisIndex,
     resolver: Option<&DiscoverIndexPathResolver>,
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 ) -> CargoDifftestsResult<AnalysisResult> {
     let mut analysis_cx = match analysis_index.index_strategy {
         AnalysisIndexStrategy::Never => {
             difftest.merge_profraw_files_into_profdata(force)?;
 
-            difftest.start_analysis(export_profdata_config_flags.config())?
+            difftest.start_analysis(export_profdata_config_flags.config(ignore_registry_files))?
         }
         AnalysisIndexStrategy::Always => {
             'l: {
@@ -962,11 +1051,15 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                let config =
-                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config = compile_test_index_config(
+                    analysis_index.compile_test_index_flags.clone(),
+                    ignore_registry_files,
+                )?;
 
-                let test_index_data = difftest
-                    .compile_test_index_data(export_profdata_config_flags.config(), config)?;
+                let test_index_data = difftest.compile_test_index_data(
+                    export_profdata_config_flags.config(ignore_registry_files),
+                    config,
+                )?;
 
                 if let Some(p) = resolver.and_then(|r| r.resolve(difftest.dir())) {
                     let parent = p.parent().unwrap();
@@ -988,11 +1081,15 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                let config =
-                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config = compile_test_index_config(
+                    analysis_index.compile_test_index_flags.clone(),
+                    ignore_registry_files,
+                )?;
 
-                let test_index_data = difftest
-                    .compile_test_index_data(export_profdata_config_flags.config(), config)?;
+                let test_index_data = difftest.compile_test_index_data(
+                    export_profdata_config_flags.config(ignore_registry_files),
+                    config,
+                )?;
 
                 if let Some(p) = resolver.and_then(|r| r.resolve(difftest.dir())) {
                     let parent = p.parent().unwrap();
@@ -1016,7 +1113,8 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                difftest.start_analysis(export_profdata_config_flags.config())?
+                difftest
+                    .start_analysis(export_profdata_config_flags.config(ignore_registry_files))?
             }
         }
     };
@@ -1032,12 +1130,14 @@ fn analyze_single_test(
 }
 
 fn analyze_single_group(
+    ctxt: &CargoDifftestsContext,
     group: &mut GroupDifftestGroup,
     force: bool,
     algo: DirtyAlgorithm,
     commit: Option<git2::Oid>,
     analysis_index: &AnalysisIndex,
     resolver: Option<&DiscoverIndexPathResolver>,
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 ) -> CargoDifftestsResult<AnalysisResult> {
     let mut analysis_cx = match analysis_index.index_strategy {
         AnalysisIndexStrategy::Never => {
@@ -1054,8 +1154,10 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                let config =
-                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config = compile_test_index_config(
+                    analysis_index.compile_test_index_flags.clone(),
+                    ignore_registry_files,
+                )?;
 
                 let test_index_data = group.compile_test_index_data(config)?;
 
@@ -1079,8 +1181,10 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                let config =
-                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config = compile_test_index_config(
+                    analysis_index.compile_test_index_flags.clone(),
+                    ignore_registry_files,
+                )?;
 
                 let test_index_data = group.compile_test_index_data(config)?;
 
@@ -1122,6 +1226,7 @@ fn analyze_single_group(
 }
 
 fn run_analyze(
+    ctxt: &CargoDifftestsContext,
     dir: PathBuf,
     force: bool,
     algo: DirtyAlgorithm,
@@ -1129,6 +1234,7 @@ fn run_analyze(
     export_profdata_config_flags: ExportProfdataConfigFlags,
     root: Option<PathBuf>,
     analysis_index: AnalysisIndex,
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 ) -> CargoDifftestsResult {
     let resolver = analysis_index.index_resolver(root)?;
 
@@ -1142,6 +1248,7 @@ fn run_analyze(
         export_profdata_config_flags,
         &analysis_index,
         resolver.as_ref(),
+        ignore_registry_files,
     )?;
 
     display_analysis_result(r);
@@ -1150,6 +1257,7 @@ fn run_analyze(
 }
 
 pub fn run_analyze_all(
+    ctxt: &CargoDifftestsContext,
     dir: PathBuf,
     force: bool,
     algo: DirtyAlgorithm,
@@ -1158,6 +1266,7 @@ pub fn run_analyze_all(
     analysis_index: AnalysisIndex,
     ignore_incompatible: bool,
     action_args: AnalyzeAllActionArgs,
+    ignore_registry_files: IgnoreRegistryFilesFlag,
 ) -> CargoDifftestsResult {
     let resolver = analysis_index.index_resolver(Some(dir.clone()))?;
     let discovered =
@@ -1165,7 +1274,10 @@ pub fn run_analyze_all(
 
     let mut results = vec![];
 
-    for mut difftest in discovered {
+    let mut pb = ctxt.shell.tree.add_child("Analyzing tests");
+    pb.init(Some(discovered.len()), Some(unit::label("difftests")));
+
+    for mut difftest in discovered.into_iter() {
         let r = analyze_single_test(
             &mut difftest,
             force,
@@ -1174,6 +1286,7 @@ pub fn run_analyze_all(
             export_profdata_config_flags.clone(),
             &analysis_index,
             resolver.as_ref(),
+            ignore_registry_files,
         )?;
 
         let result = AnalyzeAllSingleTestGroup {
@@ -1184,9 +1297,13 @@ pub fn run_analyze_all(
         };
 
         results.push(result);
+
+        pb.inc();
     }
 
-    action_args.perform_for(&results)?;
+    pb.done("done");
+
+    action_args.perform_for(ctxt, &results)?;
 
     Ok(())
 }
@@ -1211,6 +1328,7 @@ fn discover_indexes_to_vec(
 }
 
 pub fn run_analyze_all_from_index(
+    ctxt: &CargoDifftestsContext,
     index_root: PathBuf,
     algo: DirtyAlgorithm,
     commit: Option<git2::Oid>,
@@ -1246,13 +1364,38 @@ pub fn run_analyze_all_from_index(
         results.push(result);
     }
 
-    action_args.perform_for(&results)?;
+    action_args.perform_for(ctxt, &results)?;
 
     Ok(())
 }
 
+struct Shell {
+    tree: Arc<Tree>,
+}
+
+pub struct CargoDifftestsContext {
+    shell: Shell,
+}
+
 fn main_impl() -> CargoDifftestsResult {
-    pretty_env_logger::init_custom_env("CARGO_DIFFTESTS_LOG");
+    pretty_env_logger::formatted_builder()
+        .parse_env("CARGO_DIFFTESTS_LOG")
+        .init();
+
+    let ctxt = CargoDifftestsContext {
+        shell: Shell { tree: Tree::new() },
+    };
+
+    let handle = line::render(
+        std::io::stderr(),
+        Arc::downgrade(&ctxt.shell.tree),
+        line::Options {
+            frames_per_second: 20.0,
+            ..Default::default()
+        }
+        .auto_configure(line::StreamKind::Stderr),
+    );
+
     let CargoApp::Difftests { app } = CargoApp::parse();
 
     match app {
@@ -1261,7 +1404,7 @@ fn main_impl() -> CargoDifftestsResult {
             index_root,
             ignore_incompatible,
         } => {
-            run_discover_difftests(dir, index_root, ignore_incompatible)?;
+            run_discover_difftests(&ctxt, dir, index_root, ignore_incompatible)?;
         }
         App::Analyze {
             dir,
@@ -1270,8 +1413,10 @@ fn main_impl() -> CargoDifftestsResult {
             algo: AlgoArgs { algo, commit },
             export_profdata_config_flags,
             analysis_index,
+            ignore_registry_files,
         } => {
             run_analyze(
+                &ctxt,
                 dir.dir,
                 force,
                 algo,
@@ -1279,6 +1424,7 @@ fn main_impl() -> CargoDifftestsResult {
                 export_profdata_config_flags,
                 root,
                 analysis_index,
+                ignore_registry_files,
             )?;
         }
         App::AnalyzeGroup {
@@ -1288,6 +1434,7 @@ fn main_impl() -> CargoDifftestsResult {
             other_binaries,
             analysis_index,
             root,
+            ignore_registry_files,
         } => {
             let resolver = analysis_index.index_resolver(root)?;
             let mut group = cargo_difftests::group_difftest::index_group(
@@ -1297,12 +1444,14 @@ fn main_impl() -> CargoDifftestsResult {
             )?;
 
             let r = analyze_single_group(
+                &ctxt,
                 &mut group,
                 force,
                 algo.algo,
                 algo.commit,
                 &analysis_index,
                 resolver.as_ref(),
+                ignore_registry_files,
             )?;
 
             display_analysis_result(r);
@@ -1311,12 +1460,14 @@ fn main_impl() -> CargoDifftestsResult {
             dir,
             force,
             algo: AlgoArgs { algo, commit },
+            ignore_registry_files,
             export_profdata_config_flags,
             analysis_index,
             ignore_incompatible,
             action_args,
         } => {
             run_analyze_all(
+                &ctxt,
                 dir,
                 force,
                 algo,
@@ -1325,6 +1476,7 @@ fn main_impl() -> CargoDifftestsResult {
                 analysis_index,
                 ignore_incompatible,
                 action_args,
+                ignore_registry_files,
             )?;
         }
         App::AnalyzeAllFromIndex {
@@ -1332,12 +1484,14 @@ fn main_impl() -> CargoDifftestsResult {
             algo: AlgoArgs { algo, commit },
             action_args,
         } => {
-            run_analyze_all_from_index(index_root, algo, commit, action_args)?;
+            run_analyze_all_from_index(&ctxt, index_root, algo, commit, action_args)?;
         }
         App::LowLevel { cmd } => {
-            run_low_level_cmd(cmd)?;
+            run_low_level_cmd(&ctxt, cmd)?;
         }
     }
+
+    handle.shutdown_and_wait();
 
     Ok(())
 }

@@ -24,6 +24,7 @@ log.workspace = true
 path-absolutize.workspace = true
 path-slash.workspace = true
 pretty_env_logger.workspace = true
+prodash.workspace = true
 rustc-demangle.workspace = true
 serde.workspace = true
 serde_json.workspace = true

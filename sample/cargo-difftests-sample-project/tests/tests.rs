@@ -87,9 +87,13 @@ pub fn setup_difftests_group(group_name: &'static str) -> DifftestsEnv {
     }
 }
 
+#[cfg_attr(cargo_difftests, inline(never))]
+fn guard() {}
+
 #[test]
 fn test_add() {
     let _env = setup_difftests("test_add");
+    let _g = guard();
     std::thread::sleep(std::time::Duration::from_millis(400));
     assert_eq!(add(1, 2), 3);
 }
@@ -97,13 +101,15 @@ fn test_add() {
 #[test]
 fn test_sub() {
     let _env = setup_difftests("test_sub");
+    let _g = guard();
     std::thread::sleep(std::time::Duration::from_millis(100));
-    assert_eq!(sub(3, 2), 1);
+    assert_eq!(sub(3, 2), 2);
 }
 
 #[test]
 fn test_mul() {
     let _env = setup_difftests_group("advanced");
+    let _g = guard();
     std::thread::sleep(std::time::Duration::from_millis(1000));
     assert_eq!(mul(2, 3), 6);
 }
@@ -111,6 +117,7 @@ fn test_mul() {
 #[test]
 fn test_div() {
     let _env = setup_difftests_group("advanced");
+    let _g = guard();
     std::thread::sleep(std::time::Duration::from_millis(1000));
     assert_eq!(div(6, 3), Some(2));
 }
@@ -118,6 +125,7 @@ fn test_div() {
 #[test]
 fn test_div_2() {
     let _env = setup_difftests_group("advanced");
+    let _g = guard();
     std::thread::sleep(std::time::Duration::from_millis(1000));
     assert_eq!(div(6, 0), None);
 }

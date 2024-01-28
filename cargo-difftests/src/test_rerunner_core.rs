@@ -1,6 +1,105 @@
+use core::panic;
+use std::marker::PhantomData;
+
 use cargo_difftests_core::{CoreGroupDesc, CoreTestDesc};
 
 use crate::{AnalyzeAllSingleTestGroup, DifftestsResult};
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub enum State {
+    None,
+    Running {
+        current_test_count: usize,
+        total_test_count: usize,
+    },
+    Done,
+    Error,
+}
+
+pub struct TestRunnerInvocationTestCounts<'invocation> {
+    state: State,
+    _pd: PhantomData<&'invocation ()>,
+}
+
+impl<'invocation> Drop for TestRunnerInvocationTestCounts<'invocation> {
+    fn drop(&mut self) {
+        self.test_count_done().unwrap();
+    }
+}
+
+impl<'invocation> TestRunnerInvocationTestCounts<'invocation> {
+    pub fn initialize_test_counts(&mut self, total_tests_to_run: usize) -> DifftestsResult<()> {
+        match self.state {
+            State::None => {
+                self.state = State::Running {
+                    current_test_count: 0,
+                    total_test_count: total_tests_to_run,
+                };
+
+                self.write_test_counts()?;
+
+                Ok(())
+            }
+            _ => panic!("test counts already initialized"),
+        }
+    }
+
+    pub fn inc(&mut self) -> DifftestsResult<()> {
+        match &mut self.state {
+            State::None => {
+                panic!("test counts not initialized");
+            }
+            State::Running {
+                current_test_count,
+                total_test_count,
+            } => {
+                *current_test_count += 1;
+                assert!(*current_test_count <= *total_test_count);
+                self.write_test_counts()?;
+            }
+            State::Done | State::Error => {
+                panic!("test counts already done");
+            }
+        }
+
+        self.write_test_counts()?;
+
+        Ok(())
+    }
+
+    pub fn test_count_done(&mut self) -> DifftestsResult {
+        match self.state {
+            State::Done => {}
+            State::Running { .. } => {
+                self.state = State::Done;
+                self.write_test_counts()?;
+            }
+            _ => panic!("test counts not initialized"),
+        }
+
+        Ok(())
+    }
+
+    pub fn fail_if_running(&mut self) -> DifftestsResult {
+        match self.state {
+            State::Running { .. } => {
+                self.state = State::Error;
+                self.write_test_counts()?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn write_test_counts(&self) -> DifftestsResult {
+        println!(
+            "cargo-difftests-test-counts::{}",
+            serde_json::to_string(&self.state)?
+        );
+        Ok(())
+    }
+}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestRerunnerInvocation {
@@ -23,7 +122,9 @@ impl TestRerunnerInvocation {
             } else {
                 // Most likely came from an index.
                 assert_eq!(g.test_desc.len(), 1);
-                let [test] = g.test_desc.as_slice() else { unreachable!() };
+                let [test] = g.test_desc.as_slice() else {
+                    unreachable!()
+                };
                 tests.push(test.clone());
             }
         }
@@ -42,11 +143,18 @@ impl TestRerunnerInvocation {
     pub fn groups(&self) -> &[CoreGroupDesc] {
         &self.groups
     }
+
+    pub fn test_counts(&self) -> TestRunnerInvocationTestCounts {
+        TestRunnerInvocationTestCounts {
+            state: State::None,
+            _pd: PhantomData,
+        }
+    }
 }
 
 pub const CARGO_DIFFTESTS_VER_NAME: &str = "CARGO_DIFFTESTS_VER";
 
-pub fn read_invocation_from_command_line() -> std::io::Result<TestRerunnerInvocation> {
+pub fn read_invocation_from_command_line() -> DifftestsResult<TestRerunnerInvocation> {
     let v = std::env::var(CARGO_DIFFTESTS_VER_NAME).map_err(|e| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -62,7 +170,8 @@ pub fn read_invocation_from_command_line() -> std::io::Result<TestRerunnerInvoca
                 env!("CARGO_PKG_VERSION"),
                 v
             ),
-        ));
+        )
+        .into());
     }
 
     let mut args = std::env::args().skip(1);
@@ -80,7 +189,7 @@ pub fn read_invocation_from_command_line() -> std::io::Result<TestRerunnerInvoca
 #[macro_export]
 macro_rules! cargo_difftests_test_rerunner {
     ($impl_fn:path) => {
-        fn main() -> std::io::Result<impl std::process::Termination> {
+        fn main() -> $crate::DifftestsResult<impl std::process::Termination> {
             let invocation = $crate::test_rerunner_core::read_invocation_from_command_line()?;
 
             let result = $impl_fn(invocation);
