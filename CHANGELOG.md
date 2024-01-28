@@ -8,6 +8,15 @@ Basically executables that get invoked to rerun the tests which
 are considered `Dirty`, together with a default impl for really
 basic `cargo test`.
 
+### Tiny indexes by default
+
+A feature that strips away all the region-related coverage data
+from an index, significantly reducing its size. They only contain
+information about the "touched" files, but not about the specific
+regions, and as such, can only be used with the `fs-mtime` and
+`git-diff-files` algorithms; attempting to use it with `git-diff-hunks`
+will cause an error.
+
 ## Other changes
 
 - Move `rustc-wrapper-difftests` binaries into `cargo-difftests` package.

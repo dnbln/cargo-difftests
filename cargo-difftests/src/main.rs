@@ -28,7 +28,7 @@ use cargo_difftests::analysis::{
 };
 use cargo_difftests::difftest::{Difftest, DiscoverIndexPathResolver, ExportProfdataConfig};
 use cargo_difftests::group_difftest::GroupDifftestGroup;
-use cargo_difftests::index_data::{IndexDataCompilerConfig, TestIndex};
+use cargo_difftests::index_data::{IndexDataCompilerConfig, IndexSize, TestIndex};
 use cargo_difftests::{
     AnalysisVerdict, AnalyzeAllSingleTestGroup, IndexCompareDifferences, TouchSameFilesDifference,
 };
@@ -87,6 +87,20 @@ pub struct CompileTestIndexFlags {
         action(clap::ArgAction::SetFalse)
     )]
     remove_bin_path: bool,
+    /// Whether to generate a full index, or a tiny index.
+    /// 
+    /// The difference lies in the fact that the full index will contain
+    /// all the information about the files that were touched by the test,
+    /// including line and branch coverage, while the tiny index will only
+    /// contain the list of files that were touched by the test.
+    /// 
+    /// The tiny index is much faster to generate, and also much faster to
+    /// analyze with, but it does not contain any coverage information that
+    /// could be used by the `--algo=git-diff-hunks` algorithm, and as such,
+    /// using the `git-diff-hunks` algorithm with an index generated without
+    /// the `--full-index` flag will result in an error.
+    #[clap(long = "full-index")]
+    full_index: bool,
     /// Windows-only: Whether to replace all backslashes in paths with
     /// normal forward slashes.
     #[cfg(windows)]
@@ -104,6 +118,7 @@ impl Default for CompileTestIndexFlags {
             ignore_cargo_registry: true,
             flatten_files_to: Some(FlattenFilesTarget::RepoRoot),
             remove_bin_path: true,
+            full_index: false,
             #[cfg(windows)]
             path_slash_replace: true,
         }
@@ -349,6 +364,8 @@ pub struct AnalysisIndex {
     /// The strategy to use for the analysis index.
     #[clap(long, default_value_t = Default::default())]
     index_strategy: AnalysisIndexStrategy,
+    #[clap(flatten)]
+    compile_test_index_flags: CompileTestIndexFlags,
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -468,7 +485,7 @@ impl fmt::Display for AnalyzeAllActionKind {
 #[derive(Args, Debug, Clone)]
 pub struct RerunRunner {
     /// The runner to use for the `rerun-dirty` action.
-    #[clap(default_value = "cargo-difftests-default-rerunner")]
+    #[clap(long, default_value = "cargo-difftests-default-rerunner")]
     runner: PathBuf,
 }
 
@@ -753,6 +770,7 @@ fn run_analysis(
 
     analysis_cx.run(&AnalysisConfig {
         dirty_algorithm: algo.convert(commit),
+        error_on_invalid_config: true,
     })?;
 
     let r = analysis_cx.finish_analysis();
@@ -771,6 +789,7 @@ fn run_analysis_with_test_index(
 
     analysis_cx.run(&AnalysisConfig {
         dirty_algorithm: dirty_algorithm.convert(commit),
+        error_on_invalid_config: true,
     })?;
 
     let r = analysis_cx.finish_analysis();
@@ -822,6 +841,11 @@ fn compile_test_index_config(
             true
         }),
         remove_bin_path: compile_test_index_flags.remove_bin_path,
+        index_size: if compile_test_index_flags.full_index {
+            IndexSize::Full
+        } else {
+            IndexSize::Tiny
+        },
     };
 
     Ok(config)
@@ -930,7 +954,7 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                let config = compile_test_index_config(CompileTestIndexFlags::default())?;
+                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = difftest
                     .compile_test_index_data(export_profdata_config_flags.config(), config)?;
@@ -955,7 +979,7 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                let config = compile_test_index_config(CompileTestIndexFlags::default())?;
+                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = difftest
                     .compile_test_index_data(export_profdata_config_flags.config(), config)?;
@@ -989,6 +1013,7 @@ fn analyze_single_test(
 
     analysis_cx.run(&AnalysisConfig {
         dirty_algorithm: algo.convert(commit),
+        error_on_invalid_config: true,
     })?;
 
     let r = analysis_cx.finish_analysis();
@@ -1019,7 +1044,7 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                let config = compile_test_index_config(CompileTestIndexFlags::default())?;
+                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = group.compile_test_index_data(config)?;
 
@@ -1043,7 +1068,7 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                let config = compile_test_index_config(CompileTestIndexFlags::default())?;
+                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = group.compile_test_index_data(config)?;
 
@@ -1076,6 +1101,7 @@ fn analyze_single_group(
 
     analysis_cx.run(&AnalysisConfig {
         dirty_algorithm: algo.convert(commit),
+        error_on_invalid_config: true,
     })?;
 
     let r = analysis_cx.finish_analysis();
@@ -1193,6 +1219,7 @@ pub fn run_analyze_all_from_index(
             let mut analysis_cx = AnalysisContext::from_index(index);
             analysis_cx.run(&AnalysisConfig {
                 dirty_algorithm: algo.convert(commit),
+                error_on_invalid_config: true,
             })?;
             analysis_cx.finish_analysis()
         };

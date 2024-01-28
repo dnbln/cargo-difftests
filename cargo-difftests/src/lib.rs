@@ -14,6 +14,8 @@
  *    limitations under the License.
  */
 
+#![feature(let_chains)]
+
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -76,6 +78,9 @@ pub enum DifftestsError {
 
     #[error("no difftests found for group {0:?}")]
     EmptyGroup(PathBuf),
+
+    #[error("invalid config: {0}")]
+    InvalidConfig(analysis::InvalidConfigError),
 }
 
 impl From<serde_json::Error> for DifftestsError {

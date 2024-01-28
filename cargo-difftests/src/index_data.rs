@@ -84,6 +84,7 @@ impl From<IndexRegion> for IndexRegionSerDe {
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestIndex {
     /// The regions in all the files.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regions: Vec<IndexRegion>,
     /// The paths to all the files.
     pub files: Vec<PathBuf>,
@@ -138,14 +139,16 @@ impl TestIndex {
                         id
                     });
 
-                    index_data.regions.push(IndexRegion {
-                        l1: region.l1,
-                        c1: region.c1,
-                        l2: region.l2,
-                        c2: region.c2,
-                        count: region.execution_count,
-                        file_id,
-                    });
+                    if index_data_compiler_config.index_size == IndexSize::Full {
+                        index_data.regions.push(IndexRegion {
+                            l1: region.l1,
+                            c1: region.c1,
+                            l2: region.l2,
+                            c2: region.c2,
+                            count: region.execution_count,
+                            file_id,
+                        });
+                    }
                 }
             }
         }
@@ -196,14 +199,16 @@ impl TestIndex {
                         id
                     });
 
-                    index_data.regions.push(IndexRegion {
-                        l1: region.l1,
-                        c1: region.c1,
-                        l2: region.l2,
-                        c2: region.c2,
-                        count: region.execution_count,
-                        file_id,
-                    });
+                    if index_data_compiler_config.index_size == IndexSize::Full {
+                        index_data.regions.push(IndexRegion {
+                            l1: region.l1,
+                            c1: region.c1,
+                            l2: region.l2,
+                            c2: region.c2,
+                            count: region.execution_count,
+                            file_id,
+                        });
+                    }
                 }
             }
         }
@@ -243,4 +248,31 @@ pub struct IndexDataCompilerConfig {
     /// really useful, and may even not exist anymore, so passing true for this field
     /// removes it from the [`TestIndex`].
     pub remove_bin_path: bool,
+    /// The desired size of the index.
+    ///
+    /// This is useful for reducing the size of the index,
+    /// at the cost of losing some information.
+    ///
+    /// Refer to [`IndexSize`] for more information.
+    pub index_size: IndexSize,
+}
+
+/// The size of the index.
+///
+/// This is useful for reducing the size of the index,
+/// at the cost of losing some information.
+#[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq, Default)]
+pub enum IndexSize {
+    /// The smallest size, which only contains the file names.
+    ///
+    /// Tests indexes created with this size cannot be used for
+    /// [`DirtyAlgorithm::GitDiff`] with the [`GitDiffStrategy::Hunks`] strategy,
+    /// as it requires the regions to be present.
+    ///
+    /// [`DirtyAlgorithm::GitDiff`]: crate::dirty_algorithm::DirtyAlgorithm
+    /// [`GitDiffStrategy::Hunks`]: crate::dirty_algorithm::GitDiffStrategy
+    #[default]
+    Tiny,
+    /// The full size, which contains all the information, including regions.
+    Full,
 }

@@ -19,6 +19,7 @@ chrono.workspace = true
 clap.workspace = true
 git2.workspace = true
 home.workspace = true
+indoc.workspace = true
 log.workspace = true
 path-absolutize.workspace = true
 path-slash.workspace = true

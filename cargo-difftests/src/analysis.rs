@@ -49,6 +49,7 @@
 //! })?;
 //! analysis_context.run(&AnalysisConfig {
 //!     dirty_algorithm: DirtyAlgorithm::FileSystemMtimes,
+//!     error_on_invalid_config: true,
 //! })?;
 //!
 //! let r = analysis_context.finish_analysis();
@@ -70,7 +71,7 @@
 //! # use std::path::{PathBuf, Path};
 //! # use cargo_difftests::{
 //! #     difftest::{Difftest, ExportProfdataConfig},
-//! #     index_data::{IndexDataCompilerConfig, TestIndex},
+//! #     index_data::{IndexDataCompilerConfig, TestIndex, IndexSize},
 //! #     analysis::{AnalysisConfig, AnalysisContext, AnalysisResult, DirtyAlgorithm},
 //! # };
 //! // compile the test index first
@@ -87,6 +88,7 @@
 //!         remove_bin_path: true,
 //!         accept_file: Box::new(|_| true),
 //!         index_filename_converter: Box::new(|p| p.to_path_buf()),
+//!         index_size: IndexSize::Tiny,
 //!     }
 //! )?;
 //!
@@ -99,6 +101,7 @@
 //! let mut analysis_context = AnalysisContext::from_index(test_index);
 //! analysis_context.run(&AnalysisConfig {
 //!     dirty_algorithm: DirtyAlgorithm::FileSystemMtimes,
+//!     error_on_invalid_config: true,
 //! })?;
 //!
 //! let r = analysis_context.finish_analysis();
@@ -184,7 +187,7 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 use git2::{DiffDelta, DiffHunk};
-use log::{debug, info};
+use log::{debug, info, warn};
 
 use crate::analysis_data::CoverageData;
 use crate::group_difftest::GroupDifftestGroup;
@@ -362,6 +365,35 @@ impl<'r> AnalysisContext<'r> {
             },
         }
     }
+
+    pub fn files(&self, include_registry_files: bool) -> BTreeSet<PathBuf> {
+        match &self.internal {
+            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. }
+            | AnalysisContextInternal::DifftestGroupWithCoverageData { profdata, .. } => profdata
+                .data
+                .iter()
+                .flat_map(|it| {
+                    it.functions
+                        .iter()
+                        .filter(|fun| fun.regions.iter().any(|it| it.execution_count > 0))
+                        .flat_map(|fun| {
+                            fun.filenames
+                                .iter()
+                                .filter(|file| {
+                                    include_registry_files || !file_is_from_cargo_registry(file)
+                                })
+                                .map(PathBuf::clone)
+                        })
+                })
+                .collect(),
+            AnalysisContextInternal::IndexData { index } => index
+                .files
+                .iter()
+                .filter(|file| include_registry_files || !file_is_from_cargo_registry(file))
+                .map(PathBuf::clone)
+                .collect(),
+        }
+    }
 }
 
 /// An iterator over the regions that are present in the coverage data of the test.
@@ -500,6 +532,8 @@ pub enum DirtyAlgorithm {
 pub struct AnalysisConfig {
     /// The algorithm to use for the analysis.
     pub dirty_algorithm: DirtyAlgorithm,
+
+    pub error_on_invalid_config: bool,
 }
 
 impl<'r> AnalysisContext<'r> {
@@ -509,24 +543,71 @@ impl<'r> AnalysisContext<'r> {
     /// If called multiple times, the output of
     /// the analysis will correspond to the last [`AnalysisContext::run`] call.
     pub fn run(&mut self, config: &AnalysisConfig) -> DifftestsResult {
-        let AnalysisConfig { dirty_algorithm } = config;
+        let AnalysisConfig {
+            dirty_algorithm,
+            error_on_invalid_config,
+        } = config;
+
+        let dirty_algorithm = if let AnalysisContextInternal::IndexData { index } = &self.internal
+            && index.regions.is_empty()
+            && let DirtyAlgorithm::GitDiff {
+                strategy: GitDiffStrategy::Hunks,
+                commit,
+            } = &config.dirty_algorithm
+        {
+            let lvl = if *error_on_invalid_config {
+                log::Level::Error
+            } else {
+                log::Level::Warn
+            };
+            log::log!(
+                lvl,
+                "cannot use GitDiff with strategy hunks on a test index with no regions"
+            );
+            log::log!(
+                lvl,
+                "hint: you might want to pass the --full-size flag to cargo-difftests"
+            );
+            log::log!(lvl, "when compiling the index");
+
+            if *error_on_invalid_config {
+                return Err(DifftestsError::InvalidConfig(
+                    InvalidConfigError::GitDiffHunksOnTestIndexWithNoRegions,
+                ));
+            }
+
+            warn!("failling back to GitDiff with FilesOnly");
+
+            DirtyAlgorithm::GitDiff {
+                strategy: GitDiffStrategy::FilesOnly,
+                commit: *commit,
+            }
+        } else {
+            dirty_algorithm.clone()
+        };
 
         let r = match dirty_algorithm {
             DirtyAlgorithm::FileSystemMtimes => file_system_mtime_analysis(self)?,
             DirtyAlgorithm::GitDiff {
                 strategy,
                 commit: Some(commit),
-            } => git_diff_analysis_from_commit(self, *strategy, *commit)?,
+            } => git_diff_analysis_from_commit(self, strategy, commit)?,
             DirtyAlgorithm::GitDiff {
                 strategy,
                 commit: None,
-            } => git_diff_analysis(self, *strategy)?,
+            } => git_diff_analysis(self, strategy)?,
         };
 
         self.result = r;
 
         Ok(())
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, thiserror::Error)]
+pub enum InvalidConfigError {
+    #[error("GitDiff with strategy hunks cannot be used on a test index with no regions")]
+    GitDiffHunksOnTestIndexWithNoRegions,
 }
 
 /// The result of an analysis of a single [`Difftest`] or [`TestIndex`].
@@ -566,11 +647,7 @@ pub fn file_is_from_cargo_registry(f: &Path) -> bool {
 /// Returns a [`BTreeSet`] of the files that were touched by the test (have an execution_count > 0),
 /// and ignoring files from the cargo registry if `include_registry_files` = false.
 pub fn test_touched_files(cx: &AnalysisContext, include_registry_files: bool) -> BTreeSet<PathBuf> {
-    cx.regions()
-        .filter(|it| it.execution_count > 0)
-        .map(|it| it.file_ref.to_path_buf())
-        .filter(|it| include_registry_files || !file_is_from_cargo_registry(it))
-        .collect::<BTreeSet<PathBuf>>()
+    cx.files(include_registry_files)
 }
 
 /// Performs an analysis of the [`Difftest`], using file system mtimes.
