@@ -60,19 +60,8 @@ impl Display for FlattenFilesTarget {
 
 #[derive(Args, Debug, Copy, Clone)]
 pub struct CompileTestIndexFlags {
-    /// Whether to ignore files from the cargo registry.
-    ///
-    /// This is enabled by default, as files in the cargo registry are not
-    /// expected to be modified by the user.
-    ///
-    /// If you want to include files from the cargo registry, use the
-    /// `--no-ignore-cargo-registry` flag.
-    #[clap(
-        long = "no-ignore-cargo-registry",
-        default_value_t = true,
-        action(clap::ArgAction::SetFalse)
-    )]
-    ignore_cargo_registry: bool,
+    #[clap(flatten)]
+    ignore_cargo_registry: IgnoreRegistryFilesFlag,
     /// Whether to flatten all files to a directory.
     #[clap(long)]
     flatten_files_to: Option<FlattenFilesTarget>,
@@ -88,12 +77,12 @@ pub struct CompileTestIndexFlags {
     )]
     remove_bin_path: bool,
     /// Whether to generate a full index, or a tiny index.
-    /// 
+    ///
     /// The difference lies in the fact that the full index will contain
     /// all the information about the files that were touched by the test,
     /// including line and branch coverage, while the tiny index will only
     /// contain the list of files that were touched by the test.
-    /// 
+    ///
     /// The tiny index is much faster to generate, and also much faster to
     /// analyze with, but it does not contain any coverage information that
     /// could be used by the `--algo=git-diff-hunks` algorithm, and as such,
@@ -115,7 +104,9 @@ pub struct CompileTestIndexFlags {
 impl Default for CompileTestIndexFlags {
     fn default() -> Self {
         Self {
-            ignore_cargo_registry: true,
+            ignore_cargo_registry: IgnoreRegistryFilesFlag {
+                ignore_registry_files: true,
+            },
             flatten_files_to: Some(FlattenFilesTarget::RepoRoot),
             remove_bin_path: true,
             full_index: false,
@@ -431,6 +422,12 @@ pub struct OtherBinaries {
 #[derive(Args, Debug, Clone, Copy)]
 pub struct IgnoreRegistryFilesFlag {
     /// Whether to ignore files from the cargo registry.
+    ///
+    /// This is enabled by default, as files in the cargo registry are not
+    /// expected to be modified by the user.
+    ///
+    /// If you want to include files from the cargo registry, use the
+    /// `--no-ignore-registry-files` flag.
     #[clap(
         long = "no-ignore-registry-files",
         default_value_t = true,
@@ -834,7 +831,11 @@ fn compile_test_index_config(
             p
         }),
         accept_file: Box::new(move |path| {
-            if compile_test_index_flags.ignore_cargo_registry && file_is_from_cargo_registry(path) {
+            if compile_test_index_flags
+                .ignore_cargo_registry
+                .ignore_registry_files
+                && file_is_from_cargo_registry(path)
+            {
                 return false;
             }
 
@@ -954,7 +955,8 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config =
+                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = difftest
                     .compile_test_index_data(export_profdata_config_flags.config(), config)?;
@@ -979,7 +981,8 @@ fn analyze_single_test(
 
                 difftest.merge_profraw_files_into_profdata(force)?;
 
-                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config =
+                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = difftest
                     .compile_test_index_data(export_profdata_config_flags.config(), config)?;
@@ -1044,7 +1047,8 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config =
+                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = group.compile_test_index_data(config)?;
 
@@ -1068,7 +1072,8 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                let config = compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
+                let config =
+                    compile_test_index_config(analysis_index.compile_test_index_flags.clone())?;
 
                 let test_index_data = group.compile_test_index_data(config)?;
 
