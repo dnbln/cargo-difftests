@@ -4,15 +4,21 @@
 >
 > &#8212; Unknown author.
 
-`cargo-difftests` is a tool that uses LLVM coverage data + file system mtimes
-/ git diff information to find which tests have to be rerun.
+`cargo-difftests` is a selective re-testing framework for rust.
+To put it simply, it is a tool that uses LLVM coverage data +
+some information about what has changed since the last test-run
+to find which tests are most likely to have been affected by those
+changes, and therefore need to be rerun.
+
+The underlying assumption is that if a test passed in the past,
+and none of the code executed in the test has been changed since,
+then the result of the test will not change. While there are some
+edge cases to this, it is generally true for most crates out there.
 
 ## Prerequisites
 
 - Nightly rust.
 - [`cargo-binutils`](https://github.com/rust-embedded/cargo-binutils)
-- Optionally, `cargo install rustc-wrapper-difftests`, to only emit
-coverage information for crates within the workspace. See [rustc-wrapper-difftests](#rustc-wrapper-difftests) for more.
 
 ## Recommended setup (with `cargo-generate`)
 
@@ -177,7 +183,7 @@ To put it simply, `cargo-difftests` looks at the files that were "touched"
 by the test, as in, during the execution, at least one line of code in the
 given file was executed. If any of those files was modified, then it flags
 the test as dirty and outputs said verdict. If none of the files were
-modified, then re-running the test will not change the results, so the
+modified, then re-running the test will likely not change the results, so the
 verdict will be that the test is clean.
 
 So you now can run the tests, maybe change a few files, and run a command

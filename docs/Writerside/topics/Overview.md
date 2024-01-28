@@ -7,11 +7,16 @@
 > Documentation currently under construction.
 {style="warning"}
 
-`cargo-difftests` is a tool that uses LLVM coverage data +
-file system mtimes / git diff information to find which tests
-have to be rerun. We assume tests where none of the *executed*
-files changed, would not change their results, and as such, they
-don't have to be rerun.
+`cargo-difftests` is a [selective re-testing framework][selective-retesting-wikipedia] for rust.
+To put it simply, it is a tool that uses LLVM coverage data +
+some information about what has changed since the last test-run
+to find which tests are most likely to have been affected by those
+changes, and therefore need to be rerun.
+
+The underlying assumption is that if a test passed in the past,
+and none of the code executed in the test has been changed since,
+then the result of the test will not change. While there are some
+edge cases to this, it is generally true for most crates out there.
 
 ## What is `cargo-difftests`?
 
@@ -32,3 +37,6 @@ First Term
 
 Second Term
 : This is the definition of the second term.
+
+
+[selective-retesting-wikipedia]: https://en.wikipedia.org/wiki/Regression_testing#Regression_test_selection
