@@ -55,7 +55,6 @@ impl<'invocation> TestRunnerInvocationTestCounts<'invocation> {
             } => {
                 *current_test_count += 1;
                 assert!(*current_test_count <= *total_test_count);
-                self.write_test_counts()?;
             }
             State::Done | State::Error => {
                 panic!("test counts already done");
