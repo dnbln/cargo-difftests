@@ -22,6 +22,9 @@ jobs:
             override: true
             components: rustfmt, clippy
         
+        - name: Install required cargo-difftests helper binaries
+          run: cargo install cargo-difftests
+        
         - name: Build
           run: cargo build
 
