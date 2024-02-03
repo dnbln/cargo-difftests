@@ -2,9 +2,10 @@ use std::{
     borrow::Cow,
     ffi::OsStr,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
-use git2::Oid;
+use git2::{IntoCString, Oid, Repository};
 
 pub struct CargoProject {
     path: PathBuf,
@@ -166,6 +167,33 @@ impl CargoProject {
         std::fs::write(p, d)?;
         Ok(())
     }
+
+    pub fn load_git_repo(&self) -> R<Repository> {
+        Ok(Repository::open(&self.path)?)
+    }
+
+    pub fn commit<T: IntoCString>(
+        &self,
+        repo: &Repository,
+        commit_msg: &str,
+        path_spec: impl Iterator<Item = T>,
+    ) -> R<Oid> {
+        let mut index = repo.index()?;
+        index.add_all(path_spec, git2::IndexAddOption::DEFAULT, None)?;
+        index.write()?;
+        let tree_id = index.write_tree()?;
+        let signature =
+            git2::Signature::new("John Doe", "johndoe@example.com", &git2::Time::new(0, 0))?;
+        let parent_commit = repo.head()?.peel_to_commit()?;
+        Ok(repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            commit_msg,
+            &repo.find_tree(tree_id)?,
+            &[&parent_commit],
+        )?)
+    }
 }
 
 enum OutputMatch {
@@ -248,6 +276,7 @@ impl CargoDifftestsInvocation {
     }
 }
 
+#[must_use]
 pub struct CargoDifftestsTestAnalysis {
     cmd: std::process::Command,
 }
@@ -263,23 +292,27 @@ fn report_output_fail(cmd_name: &str, output: &std::process::Output) -> R {
 }
 
 impl CargoDifftestsTestAnalysis {
-    pub fn is_dirty(mut self) -> R<bool> {
+    fn output_check_and_stdout_check(mut self, expected: &[u8]) -> R<bool> {
         let output = self.cmd.output()?;
         report_output_fail("cargo-difftests", &output)?;
-        Ok(output.stdout == b"dirty\n")
+        Ok(output.stdout == expected)
     }
 
-    pub fn is_clean(mut self) -> R<bool> {
-        let output = self.cmd.output()?;
-        report_output_fail("cargo-difftests", &output)?;
-        Ok(output.stdout == b"clean\n")
+    pub fn is_dirty(self) -> R<bool> {
+        self.output_check_and_stdout_check(b"dirty\n")
     }
 
+    pub fn is_clean(self) -> R<bool> {
+        self.output_check_and_stdout_check(b"clean\n")
+    }
+
+    #[track_caller]
     pub fn assert_is_dirty(self) -> R {
         assert!(self.is_dirty()?);
         Ok(())
     }
 
+    #[track_caller]
     pub fn assert_is_clean(self) -> R {
         assert!(self.is_clean()?);
         Ok(())
@@ -288,7 +321,15 @@ impl CargoDifftestsTestAnalysis {
 
 pub type R<T = ()> = anyhow::Result<T>;
 
-pub fn create_cargo_project(test_name: &'static str) -> R<CargoProject> {
+#[derive(Default)]
+pub struct CargoProjectConfig {
+    pub init_git: bool,
+}
+
+pub fn create_cargo_project(
+    test_name: &'static str,
+    config: CargoProjectConfig,
+) -> R<CargoProject> {
     assert!(test_name
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_'));
@@ -381,11 +422,29 @@ workspace = true
 
     std::fs::write(path.join("Cargo.toml"), cargo_toml)?;
 
+    if config.init_git {
+        let repo = git2::Repository::init(&path)?;
+        let mut index = repo.index()?;
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None)?;
+        index.write()?;
+        let tree_id = index.write_tree()?;
+        let signature =
+            git2::Signature::new("John Doe", "johndoe@example.com", &git2::Time::new(0, 0))?;
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial commit",
+            &repo.find_tree(tree_id)?,
+            &[],
+        )?;
+    }
+
     Ok(CargoProject { path, test_name })
 }
 
 pub fn init_sample_project(test_name: &'static str) -> R<CargoProject> {
-    let project = create_cargo_project(test_name)?;
+    let project = create_cargo_project(test_name, CargoProjectConfig::default())?;
     project.edit(
         "src/lib.rs",
         r#"
@@ -416,8 +475,8 @@ pub fn init_sample_project(test_name: &'static str) -> R<CargoProject> {
 
     project.edit(
         "tests/tests.rs",
-        DifftestsSetupCode(
-            &format!(r#"
+        DifftestsSetupCode(&format!(
+            r#"
         use {test_name}::*;
 
         #[test]
@@ -494,19 +553,19 @@ impl TestAnalysisStrategyInfo {
         match self.algo {
             AnalysisAlgo::FsMtime => {
                 cmd.arg("--algo=fs-mtime");
-            },
+            }
             AnalysisAlgo::GitDiffHunks { commit } => {
                 cmd.arg("--algo=git-diff-hunks");
                 if let Some(commit) = commit {
                     cmd.arg("--commit").arg(commit.to_string());
                 }
-            },
+            }
             AnalysisAlgo::GitDiffFiles { commit } => {
                 cmd.arg("--algo=git-diff-files");
                 if let Some(commit) = commit {
                     cmd.arg("--commit").arg(commit.to_string());
                 }
-            },
+            }
         }
     }
 }
