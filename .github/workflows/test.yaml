@@ -1,0 +1,29 @@
+name: Test rust
+on:
+    push:
+        branches:
+            - trunk
+    pull_request:
+        branches:
+            - trunk
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+        - name: Checkout repository
+          uses: actions/checkout@v3
+
+        - name: Install latest nightly
+          uses: actions-rs/toolchain@v1
+          with:
+            toolchain: nightly
+            override: true
+            components: rustfmt, clippy
+        
+        - name: Build
+          run: cargo build
+
+        - name: Test
+          run: cargo test

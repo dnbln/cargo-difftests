@@ -2,7 +2,6 @@ use std::{
     borrow::Cow,
     ffi::OsStr,
     path::{Path, PathBuf},
-    time::SystemTime,
 };
 
 use git2::{IntoCString, Oid, Repository};
