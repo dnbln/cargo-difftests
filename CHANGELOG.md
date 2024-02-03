@@ -1,5 +1,9 @@
 # Unreleased
 
+# 0.5.0
+
+Released: 2023-02-03
+
 ## Major features
 
 ### Dirty test rerunners
