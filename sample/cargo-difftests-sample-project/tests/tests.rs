@@ -103,7 +103,7 @@ fn test_sub() {
     let _env = setup_difftests("test_sub");
     let _g = guard();
     std::thread::sleep(std::time::Duration::from_millis(100));
-    assert_eq!(sub(3, 2), 2);
+    assert_eq!(sub(3, 2), 1);
 }
 
 #[test]

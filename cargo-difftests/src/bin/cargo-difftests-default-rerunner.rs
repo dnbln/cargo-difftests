@@ -78,7 +78,7 @@ fn rerunner(invocation: TestRerunnerInvocation) -> Result<(), Error> {
             child_stdout.read_to_string(&mut stdout)?;
             child_stderr.read_to_string(&mut stderr)?;
 
-            print!("{stdout}");
+            println!("{stdout}");
             eprintln!("{stderr}");
 
             std::process::exit(1);

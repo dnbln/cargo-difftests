@@ -37,7 +37,7 @@ use cargo_difftests::{
 use clap::{Args, Parser, ValueEnum};
 use log::{info, warn};
 use prodash::render::line;
-use prodash::tree::Root as Tree;
+use prodash::tree::{Item, Root as Tree};
 use prodash::unit;
 
 #[derive(Args, Debug)]
@@ -527,7 +527,7 @@ impl AnalyzeAllActionArgs {
                     return Ok(());
                 }
 
-                let mut pb = ctxt.shell.tree.add_child("Rerunning dirty tests");
+                let mut pb = ctxt.new_child("Rerunning dirty tests");
                 pb.init(Some(1), Some(unit::label("test sets")));
 
                 let invocation_str = serde_json::to_string(&invocation)?;
@@ -1274,7 +1274,7 @@ pub fn run_analyze_all(
 
     let mut results = vec![];
 
-    let mut pb = ctxt.shell.tree.add_child("Analyzing tests");
+    let mut pb = ctxt.new_child("Analyzing tests");
     pb.init(Some(discovered.len()), Some(unit::label("difftests")));
 
     for mut difftest in discovered.into_iter() {
@@ -1375,6 +1375,12 @@ struct Shell {
 
 pub struct CargoDifftestsContext {
     shell: Shell,
+}
+
+impl CargoDifftestsContext {
+    pub fn new_child(&self, label: &str) -> Item {
+        self.shell.tree.add_child(label)
+    }
 }
 
 fn main_impl() -> CargoDifftestsResult {
