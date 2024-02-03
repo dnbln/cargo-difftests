@@ -292,6 +292,7 @@ fn report_output_fail(cmd_name: &str, output: &std::process::Output) -> R {
 
 impl CargoDifftestsTestAnalysis {
     fn output_check_and_stdout_check(mut self, expected: &[u8]) -> R<bool> {
+        println!("running {:?}", self.cmd);
         let output = self.cmd.output()?;
         report_output_fail("cargo-difftests", &output)?;
         Ok(output.stdout == expected)

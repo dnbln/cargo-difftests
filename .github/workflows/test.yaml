@@ -20,7 +20,10 @@ jobs:
           with:
             toolchain: nightly
             override: true
-            components: rustfmt, clippy
+            components: rustfmt, clippy, llvm-tools-preview
+        
+        - name: Install binutils
+          run: cargo install cargo-binutils
         
         - name: Move config file
           run: mv .cargo/config.toml .cargo/config2.toml
