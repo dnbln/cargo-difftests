@@ -60,6 +60,9 @@ impl Drop for SelfProfileWriter {
     }
 }
 
+#[cfg(feature = "compile-index-and-clean")]
+pub mod compile_index_and_clean_config;
+
 enum DifftestsEnvInner {
     Test {
         #[allow(dead_code)]
@@ -70,9 +73,15 @@ enum DifftestsEnvInner {
             not(feature = "parallel-groups")
         ))]
         _t_lock: std::sync::MutexGuard<'static, ()>,
+
+        #[cfg(feature = "compile-index-and-clean")]
+        compile_index_and_clean: Option<compile_index_and_clean_config::RunOnDrop>,
+
+        #[cfg(feature = "compile-index-and-clean")]
+        self_dir: PathBuf,
     },
     #[cfg(feature = "groups")]
-    Group(groups::GroupDifftestsEnv),
+    Group(#[allow(dead_code)] groups::GroupDifftestsEnv),
 }
 
 #[cfg(feature = "parallel-groups")]
@@ -117,6 +126,35 @@ impl DifftestsEnv {
             self.llvm_profile_file_name.as_os_str(),
             self.llvm_profile_file_value.as_os_str(),
         ))
+    }
+
+    #[cfg(feature = "compile-index-and-clean")]
+    pub fn and_compile_index_and_clean_on_exit(
+        mut self,
+        f: impl FnOnce(
+            compile_index_and_clean_config::CompileIndexAndCleanConfigBuilder,
+        ) -> compile_index_and_clean_config::CompileIndexAndCleanConfigBuilder,
+    ) -> Self {
+        match &mut self.difftests_env_inner {
+            DifftestsEnvInner::Test {
+                compile_index_and_clean,
+                self_dir,
+                ..
+            } => {
+                let c = compile_index_and_clean_config::CompileIndexAndCleanConfigBuilder::new(
+                    self_dir.clone(),
+                );
+                let c = f(c);
+                *compile_index_and_clean = Some(compile_index_and_clean_config::RunOnDrop::new(c.build()));
+            }
+            DifftestsEnvInner::Group { .. } => {
+                panic!(
+                    "and_compile_index_on_exit can only be called in a non-group test environment"
+                );
+            }
+        }
+
+        self
     }
 }
 
@@ -177,6 +215,12 @@ pub fn init<T: serde::Serialize>(
                 not(feature = "parallel-groups")
             ))]
             _t_lock,
+
+            #[cfg(feature = "compile-index-and-clean")]
+            compile_index_and_clean: None,
+
+            #[cfg(feature = "compile-index-and-clean")]
+            self_dir: tmpdir.to_path_buf(),
         },
     });
 

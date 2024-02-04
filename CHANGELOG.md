@@ -1,5 +1,19 @@
 # Unreleased
 
+## Create an index right after a test finishes
+
+With the `compile-index-and-clean` feature of the testclient,
+it can invoke `cargo-difftests` to create an index immediately
+after writing the profile, and then cleaning the intermediate
+profiling data. This only happens if the testclient is configured
+to do so (see `DifftestsEnv::and_compile_index_and_clean_on_exit`).
+
+This, together with the tiny indexes feature released in `0.5.0`,
+have the effect of a huge reduction in the on-disk space required
+to store profiling data, only a couple KBs/test (depending on project
+of course; on the sample project, the average is somewhere around 700
+bytes / test).
+
 # 0.5.0
 
 Released: 2023-02-03

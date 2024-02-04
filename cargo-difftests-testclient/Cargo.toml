@@ -15,6 +15,7 @@ default = ["enforce-single-running-test", "groups", "parallel-groups"]
 enforce-single-running-test = []
 groups = ["enforce-single-running-test", "cargo-difftests-core/groups"]
 parallel-groups = ["groups"]
+compile-index-and-clean = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

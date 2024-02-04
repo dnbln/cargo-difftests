@@ -25,9 +25,9 @@ fn setup_difftests(test_name: &str) -> DifftestsEnv {
         // the temporary directory where we will store everything we need.
         // this should be passed to various `cargo difftests` subcommands as the
         // `--dir` option.
-        let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join("cargo-difftests")
-            .join(test_name);
+        let root_dir =
+            std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("cargo-difftests");
+        let tmpdir = root_dir.join(test_name);
         let difftests_env = cargo_difftests_testclient::init(
             cargo_difftests_testclient::TestDesc::<ExtraArgs> {
                 // a "description" of the test.
@@ -57,7 +57,15 @@ fn setup_difftests(test_name: &str) -> DifftestsEnv {
         // pass some environment variables to them, like this:
         //
         // cmd.envs(difftests_env.env_for_children());
-        difftests_env
+        difftests_env.and_compile_index_and_clean_on_exit(|b| {
+            // it also supports the immediate compilation of the index,
+            // to reduce the total size of profiles on disk.
+            // (enable the compile-index-and-clean feature)
+            b.roots(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("index_root"), root_dir)
+                .flatten_files_to(
+                    cargo_difftests_testclient::compile_index_and_clean_config::FlattenFilesToTarget::RepoRoot,
+                )
+        })
     }
 }
 
