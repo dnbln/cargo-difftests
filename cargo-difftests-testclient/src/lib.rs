@@ -145,8 +145,10 @@ impl DifftestsEnv {
                     self_dir.clone(),
                 );
                 let c = f(c);
-                *compile_index_and_clean = Some(compile_index_and_clean_config::RunOnDrop::new(c.build()));
+                *compile_index_and_clean =
+                    Some(compile_index_and_clean_config::RunOnDrop::new(c.build()));
             }
+            #[cfg(feature = "groups")]
             DifftestsEnvInner::Group { .. } => {
                 panic!(
                     "and_compile_index_on_exit can only be called in a non-group test environment"
