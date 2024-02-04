@@ -1143,7 +1143,7 @@ fn analyze_single_group(
         AnalysisIndexStrategy::Never => {
             group.merge_profraws(force)?;
 
-            group.start_analysis(true)?
+            group.start_analysis(ignore_registry_files.ignore_registry_files)?
         }
         AnalysisIndexStrategy::Always => {
             'l: {
@@ -1210,7 +1210,7 @@ fn analyze_single_group(
 
                 group.merge_profraws(force)?;
 
-                group.start_analysis(true)?
+                group.start_analysis(ignore_registry_files.ignore_registry_files)?
             }
         }
     };

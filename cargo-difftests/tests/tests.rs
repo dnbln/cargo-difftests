@@ -1,19 +1,21 @@
 #![feature(exit_status_error)]
+#![feature(let_chains)]
 
 mod test_support;
 use test_support::*;
 
-#[test]
-fn simple_test() -> R {
-    let project = create_cargo_project("simple_test", CargoProjectConfig::default())?;
+fn simple_test(
+    test_name: &'static str,
+    analysis_index_strategy: impl FnOnce(&CargoProject) -> AnalysisIndexStrategyInfo,
+) -> R {
+    let project = create_cargo_project(test_name, CargoProjectConfig::default())?;
 
     project.edit("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 { a + b }")?;
     project.edit(
         "tests/tests.rs",
-        DifftestsSetupCode(
+        project.test_code(
+            "add",
             r#"
-    use simple_test::add;
-
     #[test]
     fn test_add() {
         let _env = setup_difftests("test_add");
@@ -25,7 +27,10 @@ fn simple_test() -> R {
 
     project.run_all_tests_difftests()?;
 
-    let strategy = TestAnalysisStrategyInfo::default();
+    let strategy = TestAnalysisStrategyInfo {
+        index: analysis_index_strategy(&project),
+        ..TestAnalysisStrategyInfo::default()
+    };
 
     project
         .analyze_test("test_add", &strategy)?
@@ -47,8 +52,26 @@ fn simple_test() -> R {
 }
 
 #[test]
-fn sample_project_test() -> R {
-    let project = init_sample_project("sample_project_test")?;
+fn simple_test_no_index() -> R {
+    simple_test(
+        "simple_test_no_index",
+        CargoProject::analysis_index_strategy_never,
+    )
+}
+
+#[test]
+fn simple_test_with_index() -> R {
+    simple_test(
+        "simple_test_with_index",
+        CargoProject::analysis_index_strategy_always,
+    )
+}
+
+fn sample_project_test(
+    test_name: &'static str,
+    analysis_index_strategy: impl FnOnce(&CargoProject) -> AnalysisIndexStrategyInfo,
+) -> R {
+    let project = init_sample_project(test_name)?;
 
     project.run_all_tests_difftests()?;
 
@@ -56,7 +79,10 @@ fn sample_project_test() -> R {
 
     project.touch_file("src/lib.rs")?;
 
-    let strategy = TestAnalysisStrategyInfo::default();
+    let strategy = TestAnalysisStrategyInfo {
+        index: analysis_index_strategy(&project),
+        ..TestAnalysisStrategyInfo::default()
+    };
 
     project
         .analyze_test("test_add", &strategy)?
@@ -140,9 +166,27 @@ fn sample_project_test() -> R {
 }
 
 #[test]
-fn test_git_diff_files() -> R {
+fn sample_project_test_no_index() -> R {
+    sample_project_test(
+        "sample_project_test_no_index",
+        CargoProject::analysis_index_strategy_never,
+    )
+}
+
+#[test]
+fn sample_project_test_with_index() -> R {
+    sample_project_test(
+        "sample_project_test_with_index",
+        CargoProject::analysis_index_strategy_always,
+    )
+}
+
+fn test_git_diff_files(
+    test_name: &'static str,
+    analysis_index_strategy: impl FnOnce(&CargoProject) -> AnalysisIndexStrategyInfo,
+) -> R {
     let project = create_cargo_project(
-        "test_git_diff_files",
+        test_name,
         CargoProjectConfig {
             init_git: true,
             ..CargoProjectConfig::default()
@@ -153,9 +197,9 @@ fn test_git_diff_files() -> R {
     project.edit("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 { a + b }")?;
     project.edit(
         "tests/tests.rs",
-        DifftestsSetupCode(
+        project.test_code(
+            "add",
             r#"
-    use test_git_diff_files::add;
 
     #[test]
     fn test_add() {
@@ -167,6 +211,7 @@ fn test_git_diff_files() -> R {
     )?;
     let strategy = TestAnalysisStrategyInfo {
         algo: AnalysisAlgo::git_diff_files_with_head(),
+        index: analysis_index_strategy(&project),
         ..TestAnalysisStrategyInfo::default()
     };
 
@@ -201,9 +246,27 @@ fn test_git_diff_files() -> R {
 }
 
 #[test]
-fn test_git_diff_files_with_commit() -> R {
+fn test_git_diff_files_no_index() -> R {
+    test_git_diff_files(
+        "test_git_diff_files_no_index",
+        CargoProject::analysis_index_strategy_never,
+    )
+}
+
+#[test]
+fn test_git_diff_files_with_index() -> R {
+    test_git_diff_files(
+        "test_git_diff_files_with_index",
+        CargoProject::analysis_index_strategy_always,
+    )
+}
+
+fn test_git_diff_files_with_commit(
+    test_name: &'static str,
+    analysis_index_strategy: impl FnOnce(&CargoProject) -> AnalysisIndexStrategyInfo,
+) -> R {
     let project = create_cargo_project(
-        "test_git_diff_files",
+        test_name,
         CargoProjectConfig {
             init_git: true,
             ..CargoProjectConfig::default()
@@ -214,10 +277,9 @@ fn test_git_diff_files_with_commit() -> R {
     project.edit("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 { a + b }")?;
     project.edit(
         "tests/tests.rs",
-        DifftestsSetupCode(
+        project.test_code(
+            "add",
             r#"
-    use test_git_diff_files::add;
-
     #[test]
     fn test_add() {
         let _env = setup_difftests("test_add");
@@ -235,13 +297,17 @@ fn test_git_diff_files_with_commit() -> R {
 
     let commit2 = project.commit(&repo, "Commit 3", ["src/lib.rs"].iter())?;
 
+    let index = analysis_index_strategy(&project);
+
     let strategy = TestAnalysisStrategyInfo {
         algo: AnalysisAlgo::git_diff_files_with_commit(commit),
+        index: index.clone(),
         ..TestAnalysisStrategyInfo::default()
     };
 
     let strategy2 = TestAnalysisStrategyInfo {
         algo: AnalysisAlgo::git_diff_files_with_commit(commit2),
+        index,
         ..TestAnalysisStrategyInfo::default()
     };
 
@@ -267,9 +333,27 @@ fn test_git_diff_files_with_commit() -> R {
 }
 
 #[test]
-fn test_git_diff_hunks() -> R {
+fn test_git_diff_files_with_commit_no_index() -> R {
+    test_git_diff_files_with_commit(
+        "test_git_diff_files_with_commit_no_index",
+        CargoProject::analysis_index_strategy_never,
+    )
+}
+
+#[test]
+fn test_git_diff_files_with_commit_with_index() -> R {
+    test_git_diff_files_with_commit(
+        "test_git_diff_files_with_commit_with_index",
+        CargoProject::analysis_index_strategy_always,
+    )
+}
+
+fn test_git_diff_hunks(
+    test_name: &'static str,
+    analysis_index_strategy: impl FnOnce(&CargoProject) -> AnalysisIndexStrategyInfo,
+) -> R {
     let project = create_cargo_project(
-        "test_git_diff_hunks",
+        test_name,
         CargoProjectConfig {
             init_git: true,
             ..CargoProjectConfig::default()
@@ -296,10 +380,9 @@ pub fn extra() {
 
     project.edit(
         "tests/tests.rs",
-        DifftestsSetupCode(
+        project.test_code(
+            "{add, sub}",
             r#"
-use test_git_diff_hunks::{add, sub};
-
 #[test]
 fn test_add() {
     let _env = setup_difftests("test_add");
@@ -326,6 +409,7 @@ fn test_sub() {
 
     let strategy = TestAnalysisStrategyInfo {
         algo: AnalysisAlgo::git_diff_hunks_with_head(),
+        index: analysis_index_strategy(&project),
         ..TestAnalysisStrategyInfo::default()
     };
 
@@ -390,7 +474,9 @@ pub fn extra() {
         .analyze_test("test_sub", &strategy)?
         .assert_is_dirty()?;
 
-    project.edit("src/lib.rs", r#"
+    project.edit(
+        "src/lib.rs",
+        r#"
 pub fn add(a: i32, b: i32) -> i32 {
     a + b
 }
@@ -405,7 +491,8 @@ pub fn extra() {
     // add a few comments to parts unused by both tests
 }
 
-    "#)?;
+    "#,
+    )?;
 
     project
         .analyze_test("test_add", &strategy)?
@@ -443,4 +530,20 @@ pub fn extra() {
         .assert_is_clean()?;
 
     Ok(())
+}
+
+#[test]
+fn test_git_diff_hunks_no_index() -> R {
+    test_git_diff_hunks(
+        "test_git_diff_hunks_no_index",
+        CargoProject::analysis_index_strategy_never,
+    )
+}
+
+#[test]
+fn test_git_diff_hunks_with_index() -> R {
+    test_git_diff_hunks(
+        "test_git_diff_hunks_with_index",
+        CargoProject::analysis_index_strategy_always,
+    )
 }

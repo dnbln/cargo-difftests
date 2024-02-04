@@ -566,7 +566,7 @@ impl<'r> AnalysisContext<'r> {
             );
             log::log!(
                 lvl,
-                "hint: you might want to pass the --full-size flag to cargo-difftests"
+                "hint: you might want to pass the --full-index flag to cargo-difftests"
             );
             log::log!(lvl, "when compiling the index");
 

@@ -12,31 +12,62 @@ pub struct CargoProject {
 }
 
 pub trait FileContents {
-    fn to_content(&self) -> Cow<str>;
+    fn to_content(&self, p: &CargoProject) -> Cow<str>;
 }
 
 impl FileContents for str {
-    fn to_content(&self) -> Cow<str> {
+    fn to_content(&self, _: &CargoProject) -> Cow<str> {
         Cow::Borrowed(self)
     }
 }
 
 impl FileContents for String {
-    fn to_content(&self) -> Cow<str> {
+    fn to_content(&self, _: &CargoProject) -> Cow<str> {
         Cow::Borrowed(self)
     }
 }
 
 impl FileContents for &str {
-    fn to_content(&self) -> Cow<str> {
+    fn to_content(&self, _: &CargoProject) -> Cow<str> {
         Cow::Borrowed(*self)
     }
 }
 
-pub struct DifftestsSetupCode<'s>(pub &'s str);
+pub struct NoContents;
 
-impl<'s> FileContents for DifftestsSetupCode<'s> {
-    fn to_content(&self) -> Cow<str> {
+impl FileContents for NoContents {
+    fn to_content(&self, _: &CargoProject) -> Cow<str> {
+        Cow::Borrowed("")
+    }
+}
+
+pub struct ProjectUseStmts<T: FileContents>(pub Cow<'static, str>, pub T);
+
+impl<T> FileContents for ProjectUseStmts<T>
+where
+    T: FileContents,
+{
+    fn to_content(&self, p: &CargoProject) -> Cow<str> {
+        Cow::Owned(format!(
+            r#"
+        use {test_name}::{imports};
+
+        {after}
+        "#,
+            test_name = p.test_name,
+            imports = self.0.as_ref(),
+            after = self.1.to_content(p)
+        ))
+    }
+}
+
+pub struct DifftestsSetupCode<T: FileContents>(pub T);
+
+impl<T> FileContents for DifftestsSetupCode<T>
+where
+    T: FileContents,
+{
+    fn to_content(&self, p: &CargoProject) -> Cow<str> {
         Cow::Owned(format!(
             r#"
 #[cfg(cargo_difftests)]
@@ -82,7 +113,7 @@ fn setup_difftests(test_name: &str) -> DifftestsEnv {{
 
     {}
         "#,
-            self.0
+            self.0.to_content(p)
         ))
     }
 }
@@ -97,7 +128,7 @@ impl CargoProject {
             }
         }
 
-        Ok(std::fs::write(p, contents.to_content().as_ref())?)
+        Ok(std::fs::write(p, contents.to_content(self).as_ref())?)
     }
 
     fn _internal_run_cargo(&self, args: &[&str]) -> R {
@@ -192,6 +223,30 @@ impl CargoProject {
             &repo.find_tree(tree_id)?,
             &[&parent_commit],
         )?)
+    }
+
+    pub fn analysis_index_strategy_never(&self) -> AnalysisIndexStrategyInfo {
+        AnalysisIndexStrategyInfo::Never
+    }
+
+    pub fn analysis_index_strategy_if_available(&self) -> AnalysisIndexStrategyInfo {
+        AnalysisIndexStrategyInfo::IfAvailable {
+            index_root: self.path.join("index_root"),
+        }
+    }
+
+    pub fn analysis_index_strategy_always(&self) -> AnalysisIndexStrategyInfo {
+        AnalysisIndexStrategyInfo::Always {
+            index_root: self.path.join("index_root"),
+        }
+    }
+
+    pub fn test_code(
+        &self,
+        import: impl Into<Cow<'static, str>>,
+        code: impl FileContents,
+    ) -> impl FileContents {
+        DifftestsSetupCode(ProjectUseStmts(import.into(), code))
     }
 }
 
@@ -475,35 +530,34 @@ pub fn init_sample_project(test_name: &'static str) -> R<CargoProject> {
 
     project.edit(
         "tests/tests.rs",
-        DifftestsSetupCode(&format!(
+        project.test_code(
+            "{add,sub,mul,div}",
             r#"
-        use {test_name}::*;
-
         #[test]
-        fn test_add() {{
+        fn test_add() {
             let _env = setup_difftests("test_add");
             assert_eq!(add(2, 2), 4);
-        }}
+        }
 
         #[test]
-        fn test_sub() {{
+        fn test_sub() {
             let _env = setup_difftests("test_sub");
             assert_eq!(sub(2, 2), 0);
-        }}
+        }
 
         #[test]
-        fn test_mul() {{
+        fn test_mul() {
             let _env = setup_difftests("test_mul");
             assert_eq!(mul(2, 2), 4);
-        }}
+        }
 
         #[test]
-        fn test_div() {{
+        fn test_div() {
             let _env = setup_difftests("test_div");
             assert_eq!(div(2, 2), 1);
-        }}
+        }
     "#,
-        )),
+        ),
     )?;
 
     Ok(project)
@@ -543,13 +597,68 @@ impl AnalysisAlgo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum AnalysisIndexStrategyInfo {
+    Never,
+    Always { index_root: PathBuf },
+    AlwaysAndClean { index_root: PathBuf },
+    IfAvailable { index_root: PathBuf },
+}
+
+impl Default for AnalysisIndexStrategyInfo {
+    fn default() -> Self {
+        Self::Never
+    }
+}
+
+impl AnalysisIndexStrategyInfo {
+    fn args_to_cmd(&self, cmd: &mut std::process::Command) {
+        match self {
+            Self::Never => {
+                cmd.arg("--index-strategy=never");
+            }
+            Self::Always { index_root } => {
+                cmd.arg("--index-strategy=always")
+                    .arg("--index-root")
+                    .arg(index_root)
+                    .arg("--root")
+                    .arg(format!(
+                        "{}/tmp/cargo-difftests",
+                        CargoProject::TARGET_DIR_WS
+                    ));
+            }
+            Self::AlwaysAndClean { index_root } => {
+                cmd.arg("--index-strategy=always-and-clean")
+                    .arg("--index-root")
+                    .arg(index_root)
+                    .arg("--root")
+                    .arg(format!(
+                        "{}/tmp/cargo-difftests",
+                        CargoProject::TARGET_DIR_WS
+                    ));
+            }
+            Self::IfAvailable { index_root } => {
+                cmd.arg("--index-strategy=if-available")
+                    .arg("--index-root")
+                    .arg(index_root)
+                    .arg("--root")
+                    .arg(format!(
+                        "{}/tmp/cargo-difftests",
+                        CargoProject::TARGET_DIR_WS
+                    ));
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct TestAnalysisStrategyInfo {
     pub algo: AnalysisAlgo,
+    pub index: AnalysisIndexStrategyInfo,
 }
 
 impl TestAnalysisStrategyInfo {
-    pub fn args_to_cmd(&self, cmd: &mut std::process::Command) {
+    fn args_to_cmd(&self, cmd: &mut std::process::Command) {
         match self.algo {
             AnalysisAlgo::FsMtime => {
                 cmd.arg("--algo=fs-mtime");
@@ -566,6 +675,16 @@ impl TestAnalysisStrategyInfo {
                     cmd.arg("--commit").arg(commit.to_string());
                 }
             }
+        }
+
+        self.index.args_to_cmd(cmd);
+
+        if let AnalysisAlgo::GitDiffHunks { .. } = self.algo
+            && let AnalysisIndexStrategyInfo::Always { .. }
+            | AnalysisIndexStrategyInfo::AlwaysAndClean { .. }
+            | AnalysisIndexStrategyInfo::IfAvailable { .. } = self.index
+        {
+            cmd.arg("--full-index");
         }
     }
 }
