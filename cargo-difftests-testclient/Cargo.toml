@@ -21,6 +21,7 @@ compile-index-and-clean = []
 
 [dependencies]
 cargo-difftests-core.workspace = true
+cargo-difftests-testclient-macros.workspace = true
 libc.workspace = true
 log.workspace = true
 serde.workspace = true

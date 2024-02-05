@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 
 use cargo_difftests_core::CoreTestDesc;
 
+pub use cargo_difftests_testclient_macros::test;
+
 mod llvm_profiling;
 
 /// A description of a test.
