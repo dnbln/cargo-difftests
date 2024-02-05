@@ -22,23 +22,12 @@ Make sure that:
 cargo install cargo-difftests
 ```
 
-- `cargo-difftests` supports 2 modes of collecting profiling data: For all crates, or for workspace crates only. In
-  practice, both of those work, but big projects that tend to have a lot of dependencies would generate substantially
-  larger profiles, which in turn makes their analysis much slower. So in general it is recommended to
-  only `-C instrument-coverage` workspace crates.
+## First, a bit on the rustc wrappers {id="rustc-wrapper-difftests"}
 
-<tabs group="coverage-area">
-<tab title="Coverage for all the crates" group-key="all">
-</tab>
-<tab title="Workspace-only coverage" group-key="workspace-only">
-In the case of workspace-only coverage, there is an additional package to install:
-
-```Bash
-cargo install rustc-wrapper-difftests
-```
-
-</tab>
-</tabs>
+`cargo-difftests` supports 2 modes of collecting profiling data: For all crates, or for workspace crates only. In
+practice, both of those work, but big projects that tend to have a lot of dependencies would generate substantially
+larger profiles, which in turn makes their analysis much slower. So in general it is recommended to
+only `-C instrument-coverage` workspace crates.
 
 ## Creating the `difftests` profile
 
@@ -135,6 +124,8 @@ The value it returns is quite important, here's what you have to keep in mind wh
 > let mut cmd = Command::new("...");
 > cmd.envs(difftests_env.env_for_children());
 > ```
+> 
+> More on this can be found in the [spawning subprocesses](spawning-subprocesses.md) article.
 {style="note"}
 
 ### `init` function parameters

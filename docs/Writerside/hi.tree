@@ -9,4 +9,6 @@
     <toc-element topic="Setup-with-cargo-generate.md"/>
     <toc-element topic="Manual-setup.md"/>
     <toc-element topic="Use-with-analyze-all.md"/>
+    <toc-element topic="multithreading.md"/>
+    <toc-element topic="spawning-subprocesses.md"/>
 </instance-profile>
