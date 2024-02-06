@@ -31,9 +31,9 @@ jobs:
         run: echo "OLD_COMMIT=${{ github.event.pull_request.base.sha }}" >> $GITHUB_ENV        
 
       - name: Print old commit
-        run: echo ${{ github.env.OLD_COMMIT }}
+        run: echo $OLD_COMMIT
 
-      - uses: dnbln/cargo-difftests-rerun-dirty-action@6e3a3eee583379e1977d9b487ef8d0ade87d8b3d
+      - uses: dnbln/cargo-difftests-rerun-dirty-action@a24b892eaf365907a65dd822a740f8f1f22b510e
         with:
-          commit-to-diff-with: ${{ github.env.OLD_COMMIT }}
+          commit-to-diff-with: ${{ env.OLD_COMMIT }}
           index-root: sample/cargo-difftests-sample-project/index_root
