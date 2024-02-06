@@ -32,6 +32,7 @@ pub mod difftest;
 pub mod group_difftest;
 pub mod index_data;
 pub mod test_rerunner_core;
+pub mod bin_context;
 
 /// Errors that can occur when running `cargo difftests`.
 #[derive(thiserror::Error, Debug)]

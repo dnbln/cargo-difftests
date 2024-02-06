@@ -42,3 +42,7 @@ path = "src/bin/rustc-wrapper-difftests-workspace.rs"
 [[bin]]
 name = "cargo-difftests-default-rerunner"
 path = "src/bin/cargo-difftests-default-rerunner.rs"
+
+[[bin]]
+name = "cargo-difftests"
+path = "src/bin/cargo-difftests/main.rs"
