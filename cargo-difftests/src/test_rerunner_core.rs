@@ -42,6 +42,25 @@ impl<'invocation> Drop for TestRunnerInvocationTestCounts<'invocation> {
     }
 }
 
+pub struct TestRunnerInvocationTestCountsTestGuard<'invocation, 'counts> {
+    counts: &'counts mut TestRunnerInvocationTestCounts<'invocation>,
+    test_name: String,
+}
+
+impl<'invocation, 'counts> TestRunnerInvocationTestCountsTestGuard<'invocation, 'counts> {
+    pub fn test_successful(self) -> DifftestsResult<()> {
+        self.counts.inc()?;
+        println!("cargo-difftests-test-successful::{}", self.test_name);
+        Ok(())
+    }
+
+    pub fn test_failed(self) -> DifftestsResult<()> {
+        self.counts.fail_if_running()?;
+        println!("cargo-difftests-test-failed::{}", self.test_name);
+        Ok(())
+    }
+}
+
 impl<'invocation> TestRunnerInvocationTestCounts<'invocation> {
     pub fn initialize_test_counts(&mut self, total_tests_to_run: usize) -> DifftestsResult<()> {
         match self.state {
@@ -57,6 +76,23 @@ impl<'invocation> TestRunnerInvocationTestCounts<'invocation> {
             }
             _ => panic!("test counts already initialized"),
         }
+    }
+
+    pub fn start_test<'counts>(
+        &'counts mut self,
+        test_name: String,
+    ) -> DifftestsResult<TestRunnerInvocationTestCountsTestGuard<'invocation, 'counts>> {
+        match self.state {
+            State::Running { .. } => {}
+            _ => panic!("test counts not initialized"),
+        }
+
+        println!("cargo-difftests-start-test::{}", test_name);
+
+        Ok(TestRunnerInvocationTestCountsTestGuard {
+            counts: self,
+            test_name,
+        })
     }
 
     pub fn inc(&mut self) -> DifftestsResult<()> {

@@ -13,6 +13,5 @@ pub fn div(a: i32, b: i32) -> Option<i32> {
         Some(div_unchecked(a, b))
     } else {
         None
-        // dummy comment
     }
 }

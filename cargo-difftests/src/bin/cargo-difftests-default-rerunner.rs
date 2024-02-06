@@ -63,6 +63,7 @@ fn rerunner(invocation: TestRerunnerInvocation) -> Result<(), Error> {
         .unwrap_or_default();
     for test in invocation.tests() {
         let e = test.parse_extra::<TestRerunnerDefaultExtra>()?;
+        let t = counts.0.start_test(e.test_name.clone())?;
         let mut child = std::process::Command::new("cargo")
             .args(&[
                 "test",
@@ -84,9 +85,9 @@ fn rerunner(invocation: TestRerunnerInvocation) -> Result<(), Error> {
         let r = child.wait()?;
 
         if r.success() {
-            counts.0.inc()?;
+            t.test_successful()?;
         } else {
-            counts.0.fail_if_running()?;
+            t.test_failed()?;
 
             let mut stdout = String::new();
             let mut stderr = String::new();

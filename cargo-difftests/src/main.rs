@@ -621,6 +621,15 @@ impl AnalyzeAllActionArgs {
                                     tests.fail("Tests failed");
                                 }
                             }
+                        } else if line.starts_with("cargo-difftests-start-test::") {
+                            let t = line.trim_start_matches("cargo-difftests-start-test::");
+                            tests.info(format!("Running test {t}"));
+                        } else if line.starts_with("cargo-difftests-test-successful::") {
+                            let t = line.trim_start_matches("cargo-difftests-test-successful::");
+                            tests.info(format!("Test {t} successful"));
+                        } else if line.starts_with("cargo-difftests-test-failed::") {
+                            let t = line.trim_start_matches("cargo-difftests-test-failed::");
+                            tests.info(format!("Test {t} failed"));
                         } else {
                             info!("rerun stdout: {line}");
                         }
