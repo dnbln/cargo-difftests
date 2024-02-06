@@ -32,9 +32,8 @@ fn simple_test(
         project.test_code(
             "add",
             r#"
-    #[test]
-    fn test_add() {
-        let _env = setup_difftests("test_add");
+    #[cargo_difftests_testclient::test]
+    fn test_add(_: &DifftestsEnv) {
         assert_eq!(add(1, 2), 3);
     }
     "#,
@@ -216,10 +215,8 @@ fn test_git_diff_files(
         project.test_code(
             "add",
             r#"
-
-    #[test]
-    fn test_add() {
-        let _env = setup_difftests("test_add");
+    #[cargo_difftests_testclient::test]
+    fn test_add(_: &DifftestsEnv) {
         assert_eq!(add(1, 2), 3);
     }
     "#,
@@ -296,9 +293,8 @@ fn test_git_diff_files_with_commit(
         project.test_code(
             "add",
             r#"
-    #[test]
-    fn test_add() {
-        let _env = setup_difftests("test_add");
+    #[cargo_difftests_testclient::test]
+    fn test_add(_: &DifftestsEnv) {
         assert_eq!(add(1, 2), 3);
     }
     "#,
@@ -399,15 +395,13 @@ pub fn extra() {
         project.test_code(
             "{add, sub}",
             r#"
-#[test]
-fn test_add() {
-    let _env = setup_difftests("test_add");
+#[cargo_difftests_testclient::test]
+fn test_add(_: &DifftestsEnv) {
     assert_eq!(add(1, 2), 3);
 }
 
-#[test]
-fn test_sub() {
-    let _env = setup_difftests("test_sub");
+#[cargo_difftests_testclient::test]
+fn test_sub(_: &DifftestsEnv) {
     assert_eq!(sub(3, 2), 1);
 }
 

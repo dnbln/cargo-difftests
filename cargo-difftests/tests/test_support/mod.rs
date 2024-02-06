@@ -549,27 +549,23 @@ pub fn init_sample_project(test_name: &'static str) -> R<CargoProject> {
         project.test_code(
             "{add,sub,mul,div}",
             r#"
-        #[test]
-        fn test_add() {
-            let _env = setup_difftests("test_add");
+        #[cargo_difftests_testclient::test]
+        fn test_add(_: &DifftestsEnv) {
             assert_eq!(add(2, 2), 4);
         }
 
-        #[test]
-        fn test_sub() {
-            let _env = setup_difftests("test_sub");
+        #[cargo_difftests_testclient::test]
+        fn test_sub(_: &DifftestsEnv) {
             assert_eq!(sub(2, 2), 0);
         }
 
-        #[test]
-        fn test_mul() {
-            let _env = setup_difftests("test_mul");
+        #[cargo_difftests_testclient::test]
+        fn test_mul(_: &DifftestsEnv) {
             assert_eq!(mul(2, 2), 4);
         }
 
-        #[test]
-        fn test_div() {
-            let _env = setup_difftests("test_div");
+        #[cargo_difftests_testclient::test]
+        fn test_div(_: &DifftestsEnv) {
             assert_eq!(div(2, 2), 1);
         }
     "#,
