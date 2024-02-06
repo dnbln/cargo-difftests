@@ -131,7 +131,7 @@ fn setup_difftests(test_name: &str) -> DifftestsEnv {
                 pkg_name: env!("CARGO_PKG_NAME").to_string(),
                 crate_name: env!("CARGO_CRATE_NAME").to_string(),
                 bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
-                group_name: group.to_string(),
+                test_name: test_name.to_owned(),
             },
         },
         &tmpdir,
