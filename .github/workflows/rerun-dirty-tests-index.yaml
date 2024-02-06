@@ -33,7 +33,7 @@ jobs:
       - name: Print old commit
         run: echo $OLD_COMMIT
 
-      - uses: dnbln/cargo-difftests-rerun-dirty-action@a24b892eaf365907a65dd822a740f8f1f22b510e
+      - uses: dnbln/cargo-difftests-rerun-dirty-action@e02542cca4f6b17095ac53725987bca1acf82b4e
         with:
           commit-to-diff-with: ${{ env.OLD_COMMIT }}
           index-root: sample/cargo-difftests-sample-project/index_root
