@@ -14,6 +14,10 @@ to store profiling data, only a couple KBs/test (depending on project
 of course; on the sample project, the average is somewhere around 700
 bytes / test).
 
+## Export basic dummy interface for `DifftestsEnv`
+
+So tests that use it can do so without lots of cfg's.
+
 # 0.5.0
 
 Released: 2023-02-03

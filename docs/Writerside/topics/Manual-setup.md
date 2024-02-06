@@ -124,9 +124,9 @@ The value it returns is quite important, here's what you have to keep in mind wh
 > let mut cmd = Command::new("...");
 > cmd.envs(difftests_env.env_for_children());
 > ```
-> 
+>
 > More on this can be found in the [spawning subprocesses](spawning-subprocesses.md) article.
-{style="note"}
+> {style="note"}
 
 ### `init` function parameters
 
@@ -172,13 +172,8 @@ Putting it all together, it should look something like this.
 We can `#[cfg]` code based on the `--cfg cargo_difftests` that we added above.
 
 ```Rust
-#[cfg(cargo_difftests)]
-type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
+use cargo_difftests_testclient::DifftestsEnv;
 
-#[cfg(not(cargo_difftests))]
-type DifftestsEnv = ();
-
-#[cfg(cargo_difftests)]
 #[derive(serde::Serialize, Clone)]
 struct ExtraArgs {
     pkg_name: String,
@@ -188,24 +183,21 @@ struct ExtraArgs {
 
 #[must_use]
 fn setup_difftests(test_name: &str) -> DifftestsEnv {
-    #[cfg(cargo_difftests)]
-    {
-        let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join("cargo-difftests")
-            .join(test_name);
-        let difftests_env = cargo_difftests_testclient::init(
-            cargo_difftests_testclient::TestDesc::<ExtraArgs> {
-                bin_path: std::env::current_exe().unwrap(),
-                extra: ExtraArgs {
-                    pkg_name: env!("CARGO_PKG_NAME").to_string(),
-                    crate_name: env!("CARGO_CRATE_NAME").to_string(),
-                    test_name: test_name.to_string(),
-                },
+    let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("cargo-difftests")
+        .join(test_name);
+    let difftests_env = cargo_difftests_testclient::init(
+        cargo_difftests_testclient::TestDesc::<ExtraArgs> {
+            bin_path: std::env::current_exe().unwrap(),
+            extra: ExtraArgs {
+                pkg_name: env!("CARGO_PKG_NAME").to_string(),
+                crate_name: env!("CARGO_CRATE_NAME").to_string(),
+                test_name: test_name.to_string(),
             },
-            &tmpdir,
-        )
-        .unwrap()
-    }
+        },
+        &tmpdir,
+    )
+    .unwrap()
 }
 ```
 
@@ -219,6 +211,35 @@ fn test_fn() {
 ```
 
 {collapsible="true" collapsed-title="An example test"}
+
+Given that `setup_difftests` resets the LLVM profiling runtime counters,
+it is generally recommended to wrap everything like this:
+
+```Rust
+#[test]
+fn test_fn() {
+    let _env = setup_difftests("test_fn");
+    
+    fn test_code(difftests_env: &DifftestsEnv) {
+        assert_eq!(1 + 1, 2);
+    }
+    
+    test_code(&_env);
+}
+```
+
+The `cargo_difftests_testclient::test` macro can be used to make this easier:
+
+```Rust
+#[cargo_difftests_testclient::test]
+fn test_fn(difftests_env: &DifftestsEnv) {
+    assert_eq!(1 + 1, 2);
+}
+```
+
+The attribute also accepts an optional path, which will be called to initialize
+the `testclient` environment (by default the `setup_difftests` found in the test's
+context, but it can be changed).
 
 ## Invoking `cargo-difftests`
 

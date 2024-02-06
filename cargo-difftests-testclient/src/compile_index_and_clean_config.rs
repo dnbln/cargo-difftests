@@ -196,7 +196,7 @@ pub fn do_build_index_and_clean(config: &CompileIndexAndCleanConfig) -> std::io:
 pub struct RunOnDrop(CompileIndexAndCleanConfig);
 
 impl RunOnDrop {
-    pub fn new(config: CompileIndexAndCleanConfig) -> Self {
+    pub(crate) fn new(config: CompileIndexAndCleanConfig) -> Self {
         Self(config)
     }
 }

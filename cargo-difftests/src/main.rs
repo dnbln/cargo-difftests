@@ -1444,6 +1444,9 @@ pub fn run_analyze_all_from_index(
         indexes
     };
 
+    let mut pb = ctxt.new_child("Analyzing tests");
+    pb.init(Some(indexes.len()), Some(unit::label("indexes")));
+
     let mut results = vec![];
 
     for index in indexes {
@@ -1466,7 +1469,10 @@ pub fn run_analyze_all_from_index(
         };
 
         results.push(result);
+        pb.inc();
     }
+
+    pb.done("done");
 
     action_args.perform_for(ctxt, &results)?;
 

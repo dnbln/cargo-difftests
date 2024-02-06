@@ -14,8 +14,6 @@
  *    limitations under the License.
  */
 
-#![cfg(any(cargo_difftests, docsrs))]
-
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
@@ -37,10 +35,12 @@ pub struct TestDesc<T: serde::Serialize> {
     pub extra: T,
 }
 
+#[cfg(cargo_difftests)]
 struct SelfProfileWriter {
     llvm_profile_self_file: PathBuf,
 }
 
+#[cfg(cargo_difftests)]
 impl SelfProfileWriter {
     fn do_write_to_file(file: &std::path::Path) {
         unsafe {
@@ -56,6 +56,7 @@ impl SelfProfileWriter {
     }
 }
 
+#[cfg(cargo_difftests)]
 impl Drop for SelfProfileWriter {
     fn drop(&mut self) {
         Self::do_write_to_file(&self.llvm_profile_self_file);
@@ -65,6 +66,7 @@ impl Drop for SelfProfileWriter {
 #[cfg(feature = "compile-index-and-clean")]
 pub mod compile_index_and_clean_config;
 
+#[cfg(cargo_difftests)]
 enum DifftestsEnvInner {
     Test {
         #[allow(dead_code)]
@@ -86,7 +88,7 @@ enum DifftestsEnvInner {
     Group(#[allow(dead_code)] groups::GroupDifftestsEnv),
 }
 
-#[cfg(feature = "parallel-groups")]
+#[cfg(all(cargo_difftests, feature = "parallel-groups"))]
 impl Drop for DifftestsEnvInner {
     fn drop(&mut self) {
         match self {
@@ -101,6 +103,7 @@ impl Drop for DifftestsEnvInner {
 }
 
 /// The difftests environment.
+#[cfg(cargo_difftests)]
 pub struct DifftestsEnv {
     llvm_profile_file_name: OsString,
     llvm_profile_file_value: OsString,
@@ -109,7 +112,11 @@ pub struct DifftestsEnv {
     difftests_env_inner: DifftestsEnvInner,
 }
 
+#[cfg(not(cargo_difftests))]
+pub struct DifftestsEnv(());
+
 #[cfg(all(
+    cargo_difftests,
     feature = "enforce-single-running-test",
     not(feature = "parallel-groups")
 ))]
@@ -123,6 +130,7 @@ fn test_lock() -> std::sync::MutexGuard<'static, ()> {
 impl DifftestsEnv {
     /// Returns an iterator over the environment variables that should be set
     /// for child processes.
+    #[cfg(cargo_difftests)]
     pub fn env_for_children(&self) -> impl Iterator<Item = (&OsStr, &OsStr)> {
         std::iter::once((
             self.llvm_profile_file_name.as_os_str(),
@@ -130,7 +138,12 @@ impl DifftestsEnv {
         ))
     }
 
-    #[cfg(feature = "compile-index-and-clean")]
+    #[cfg(not(cargo_difftests))]
+    pub fn env_for_children(&self) -> impl Iterator<Item = (&OsStr, &OsStr)> {
+        std::iter::empty()
+    }
+
+    #[cfg(all(cargo_difftests, feature = "compile-index-and-clean"))]
     pub fn and_compile_index_and_clean_on_exit(
         mut self,
         f: impl FnOnce(
@@ -160,9 +173,28 @@ impl DifftestsEnv {
 
         self
     }
+
+    #[cfg(all(not(cargo_difftests), feature = "compile-index-and-clean"))]
+    pub fn and_compile_index_and_clean_on_exit(
+        self,
+        _f: impl FnOnce(
+            compile_index_and_clean_config::CompileIndexAndCleanConfigBuilder,
+        ) -> compile_index_and_clean_config::CompileIndexAndCleanConfigBuilder,
+    ) -> Self {
+        self
+    }
+}
+
+#[cfg(not(cargo_difftests))]
+pub fn init<T: serde::Serialize>(
+    desc: TestDesc<T>,
+    tmpdir: &Path,
+) -> std::io::Result<DifftestsEnv> {
+    Ok(DifftestsEnv(()))
 }
 
 /// Initializes the difftests environment.
+#[cfg(cargo_difftests)]
 pub fn init<T: serde::Serialize>(
     desc: TestDesc<T>,
     tmpdir: &Path,
@@ -235,4 +267,5 @@ pub fn init<T: serde::Serialize>(
     r
 }
 
+#[cfg(cargo_difftests)]
 pub mod groups;
