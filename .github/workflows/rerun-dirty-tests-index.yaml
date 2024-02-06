@@ -39,3 +39,5 @@ jobs:
           commit-to-diff-with: ${{ env.OLD_COMMIT }}
           index-root: sample/cargo-difftests-sample-project/index_root
           cargo-difftests-crate-path: cargo-difftests
+        env:
+          CARGO_DIFFTESTS_LOG: debug
