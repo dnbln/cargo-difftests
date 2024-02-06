@@ -48,19 +48,19 @@ A simple use of the `cargo difftests` now is as follows (in the template reposit
 % cargo t --profile difftests # collect profiling data
 % cargo difftests analyze-all
 % touch src/advanced_arithmetic.rs # change mtime
-% cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+% cargo difftests analyze --dir target/tmp/cargo-difftests/test_add
 clean
-% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+% cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 dirty
-% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+% cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 dirty
 % cargo t --profile difftests test_mul
-% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+% cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 clean
-% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+% cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 dirty
 % cargo t --profile difftests test_div
-% cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+% cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 clean
 ```
 
@@ -97,11 +97,7 @@ on child processes to do the same.
 An example usage of the testclient library could be as follows (taken from the sample directory, which has a full sample project set up for `cargo-difftests`):
 
 ```rust
-#[cfg(cargo_difftests)]
-type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
-
-#[cfg(not(cargo_difftests))]
-type DifftestsEnv = ();
+use cargo_difftests_testclient::DifftestsEnv;
 
 #[derive(serde::Serialize, Clone)]
 struct ExtraArgs {
@@ -113,46 +109,42 @@ struct ExtraArgs {
 
 #[must_use]
 fn setup_difftests(test_name: &str) -> DifftestsEnv {
-    #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty
-    // without this cfg
-    {
-        // the temporary directory where we will store everything we need.
-        // this should be passed to various `cargo difftests` subcommands as the
-        // `--dir` option.
-        let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join("cargo-difftests")
-            .join(test_name);
-        let difftests_env = cargo_difftests_testclient::init(
-            cargo_difftests_testclient::TestDesc::<ExtraArgs> {
-                // a "description" of the test.
-                // cargo-difftests needs the binary path for analysis
-                bin_path: std::env::current_exe().unwrap(),
-                // the extra fields that you might need to identify the test.
-                //
-                // it is your job to use
-                // the data in here to identify the test
-                // and rerun it if needed.
-                // you can use any type you want, but it has to
-                // implement `serde::Serialize`
-                extra: ExtraArgs {
-                    pkg_name: env!("CARGO_PKG_NAME").to_string(),
-                    crate_name: env!("CARGO_CRATE_NAME").to_string(),
-                    bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
-                    group_name: group.to_string(),
-                },
+    // the temporary directory where we will store everything we need.
+    // this should be passed to various `cargo difftests` subcommands as the
+    // `--dir` option.
+    let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join("cargo-difftests")
+        .join(test_name);
+    let difftests_env = cargo_difftests_testclient::init(
+        cargo_difftests_testclient::TestDesc::<ExtraArgs> {
+            // a "description" of the test.
+            // cargo-difftests needs the binary path for analysis
+            bin_path: std::env::current_exe().unwrap(),
+            // the extra fields that you might need to identify the test.
+            //
+            // it is your job to use
+            // the data in here to identify the test
+            // and rerun it if needed.
+            // you can use any type you want, but it has to
+            // implement `serde::Serialize`
+            extra: ExtraArgs {
+                pkg_name: env!("CARGO_PKG_NAME").to_string(),
+                crate_name: env!("CARGO_CRATE_NAME").to_string(),
+                bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
+                group_name: group.to_string(),
             },
-            &tmpdir,
-        )
-        .unwrap();
-        // the difftests_env is important, because its Drop impl has
-        // some cleanup to do (including actually writing the profile).
-        //
-        // if spawning children, it is also needed to
-        // pass some environment variables to them, like this:
-        //
-        // cmd.envs(difftests_env.env_for_children());
-        difftests_env
-    }
+        },
+        &tmpdir,
+    )
+    .unwrap();
+    // the difftests_env is important, because its Drop impl has
+    // some cleanup to do (including actually writing the profile).
+    //
+    // if spawning children, it is also needed to
+    // pass some environment variables to them, like this:
+    //
+    // cmd.envs(difftests_env.env_for_children());
+    difftests_env
 }
 
 #[test]
