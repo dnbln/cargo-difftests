@@ -6,8 +6,8 @@ use prodash::unit;
 
 use crate::{
     cli_core::{
-        AlgoArgs, AnalysisIndex, AnalyzeAllActionArgs, DirtyAlgorithm, ExportProfdataConfigFlags,
-        IgnoreRegistryFilesFlag,
+        AlgoArgs, AnalysisIndex, AnalyzeAllActionArgs, DifftestsRootDir, DirtyAlgorithm,
+        ExportProfdataConfigFlags, IgnoreRegistryFilesFlag,
     },
     CargoDifftestsResult,
 };
@@ -16,12 +16,8 @@ use crate::ops::core::{analyze_single_test, discover_difftests};
 
 #[derive(Parser, Debug)]
 pub struct AnalyzeAllCommand {
-    /// The root directory where all the difftests were stored.
-    ///
-    /// This should be some common ancestor directory of all
-    /// the paths passed to `cargo_difftests_testclient::init`.
-    #[clap(long, default_value = "target/tmp/cargo-difftests")]
-    dir: PathBuf,
+    #[clap(flatten)]
+    dir: DifftestsRootDir,
     #[clap(flatten)]
     ignore_registry_files: IgnoreRegistryFilesFlag,
     /// Whether to force the generation of intermediary files.
@@ -51,7 +47,7 @@ impl AnalyzeAllCommand {
     pub fn run(self, ctxt: &CargoDifftestsContext) -> CargoDifftestsResult {
         run_analyze_all(
             ctxt,
-            self.dir,
+            self.dir.dir,
             self.force,
             self.algo.algo,
             self.algo.commit,

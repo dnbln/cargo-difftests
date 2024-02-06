@@ -544,3 +544,29 @@ impl AnalyzeAllActionArgs {
         Ok(())
     }
 }
+
+#[derive(Args, Debug, Clone)]
+pub struct DifftestsRoot {
+    /// The root directory where all the difftests were stored.
+    ///
+    /// Needs to be known to be able to properly remap the paths
+    /// to the index files, and is therefore only required if the
+    /// `--index-strategy` is `always`, `always-and-clean`, or
+    /// `if-available`.
+    #[clap(long)]
+    pub root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct DifftestsRootDir {
+    /// The root directory where all the difftests were stored.
+    ///
+    /// Needs to be known to be able to properly remap the paths
+    /// to the index files, and is therefore only required if the
+    /// `--index-strategy` is `always`, `always-and-clean`, or
+    /// `if-available`.
+    ///
+    /// (Also for discovery)
+    #[clap(long, default_value = "target/tmp/cargo-difftests")]
+    pub dir: PathBuf,
+}

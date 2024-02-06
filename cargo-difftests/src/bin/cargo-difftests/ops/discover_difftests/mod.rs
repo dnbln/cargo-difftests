@@ -3,16 +3,12 @@ use std::path::PathBuf;
 use cargo_difftests::bin_context::CargoDifftestsContext;
 use clap::Parser;
 
-use crate::{ops::core::discover_difftests, CargoDifftestsResult};
+use crate::{cli_core::DifftestsRootDir, ops::core::discover_difftests, CargoDifftestsResult};
 
 #[derive(Parser, Debug)]
 pub struct DiscoverDifftestsCommand {
-    /// The root directory where all the difftests were stored.
-    ///
-    /// This should be some common ancestor directory of all
-    /// the paths passed to `cargo_difftests_testclient::init`.
-    #[clap(long, default_value = "target/tmp/cargo-difftests")]
-    dir: PathBuf,
+    #[clap(flatten)]
+    root: DifftestsRootDir,
     /// The directory where the index files were stored, if any.
     #[clap(long)]
     index_root: Option<PathBuf>,
@@ -23,12 +19,18 @@ pub struct DiscoverDifftestsCommand {
     #[clap(long)]
     ignore_incompatible: bool,
 }
+
 impl DiscoverDifftestsCommand {
     pub fn run(
         self,
         ctxt: &cargo_difftests::bin_context::CargoDifftestsContext,
     ) -> CargoDifftestsResult {
-        run_discover_difftests(ctxt, self.dir, self.index_root, self.ignore_incompatible)
+        run_discover_difftests(
+            ctxt,
+            self.root.dir,
+            self.index_root,
+            self.ignore_incompatible,
+        )
     }
 }
 

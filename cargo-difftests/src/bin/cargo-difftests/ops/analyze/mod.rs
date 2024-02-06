@@ -5,8 +5,7 @@ use clap::Parser;
 
 use crate::{
     cli_core::{
-        AlgoArgs, AnalysisIndex, DifftestDir, DirtyAlgorithm, ExportProfdataConfigFlags,
-        IgnoreRegistryFilesFlag,
+        AlgoArgs, AnalysisIndex, DifftestDir, DifftestsRoot, DirtyAlgorithm, ExportProfdataConfigFlags, IgnoreRegistryFilesFlag
     },
     CargoDifftestsResult,
 };
@@ -29,14 +28,9 @@ pub struct AnalyzeCommand {
     export_profdata_config_flags: ExportProfdataConfigFlags,
     #[clap(flatten)]
     analysis_index: AnalysisIndex,
-    /// The root directory where all the difftests were stored.
-    ///
-    /// Needs to be known to be able to properly remap the paths
-    /// to the index files, and is therefore only required if the
-    /// `--index-strategy` is `always`, `always-and-clean`, or
-    /// `if-available`.
-    #[clap(long, default_value = "target/tmp/cargo-difftests")]
-    root: Option<PathBuf>,
+
+    #[clap(flatten)]
+    root: DifftestsRoot,
 
     #[clap(flatten)]
     ignore_registry_files: IgnoreRegistryFilesFlag,
@@ -51,7 +45,7 @@ impl AnalyzeCommand {
             self.algo.algo,
             self.algo.commit,
             self.export_profdata_config_flags,
-            self.root,
+            self.root.root,
             self.analysis_index,
             self.ignore_registry_files,
         )

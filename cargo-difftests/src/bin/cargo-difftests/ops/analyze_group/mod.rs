@@ -4,7 +4,7 @@ use cargo_difftests::bin_context::CargoDifftestsContext;
 use clap::Parser;
 
 use crate::{
-    cli_core::{AlgoArgs, AnalysisIndex, IgnoreRegistryFilesFlag, OtherBinaries},
+    cli_core::{AlgoArgs, AnalysisIndex, DifftestsRoot, IgnoreRegistryFilesFlag, OtherBinaries},
     CargoDifftestsResult,
 };
 
@@ -27,14 +27,8 @@ pub struct AnalyzeGroupCommand {
     other_binaries: OtherBinaries,
     #[clap(flatten)]
     analysis_index: AnalysisIndex,
-    /// The root directory where all the difftests were stored.
-    ///
-    /// Needs to be known to be able to properly remap the paths
-    /// to the index files, and is therefore only required if the
-    /// `--index-strategy` is `always`, `always-and-clean`, or
-    /// `if-available`.
-    #[clap(long, default_value = "target/tmp/cargo-difftests")]
-    root: Option<PathBuf>,
+    #[clap(flatten)]
+    root: DifftestsRoot,
 
     #[clap(flatten)]
     ignore_registry_files: IgnoreRegistryFilesFlag,
@@ -44,7 +38,7 @@ impl AnalyzeGroupCommand {
     pub fn run(self, ctxt: &CargoDifftestsContext) -> CargoDifftestsResult {
         run_analyze_group(
             ctxt,
-            self.root,
+            self.root.root,
             self.force,
             self.algo,
             self.other_binaries,
