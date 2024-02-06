@@ -10,6 +10,19 @@ jobs:
   rerun-dirty-tests-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          components: rustfmt, clippy, llvm-tools-preview
+      
+      - name: Install binutils
+        run: cargo install cargo-binutils
+
       - name: Set old commit (push)
         if: ${{ github.event.before != null }}
         run: echo "OLD_COMMIT=${{ github.event.before }}" >> $GITHUB_ENV
