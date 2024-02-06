@@ -109,11 +109,10 @@ struct ExtraArgs {
     crate_name: String,
     bin_name: Option<String>,
     test_name: String,
-    group_name: String,
 }
 
 #[must_use]
-fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
+fn setup_difftests(test_name: &str) -> DifftestsEnv {
     #[cfg(cargo_difftests)] // the cargo_difftests_testclient crate is empty
     // without this cfg
     {
@@ -122,7 +121,6 @@ fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
         // `--dir` option.
         let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
             .join("cargo-difftests")
-            .join(group)
             .join(test_name);
         let difftests_env = cargo_difftests_testclient::init(
             cargo_difftests_testclient::TestDesc::<ExtraArgs> {
@@ -140,7 +138,6 @@ fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
                     pkg_name: env!("CARGO_PKG_NAME").to_string(),
                     crate_name: env!("CARGO_CRATE_NAME").to_string(),
                     bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
-                    test_name: test_name.to_string(),
                     group_name: group.to_string(),
                 },
             },
@@ -160,7 +157,7 @@ fn setup_difftests(group: &str, test_name: &str) -> DifftestsEnv {
 
 #[test]
 fn test_fn() {
-    let _env = setup_difftests("dummy_group", "test_fn");
+    let _env = setup_difftests("test_fn");
     assert_eq!(1 + 1, 2);
 }
 ```

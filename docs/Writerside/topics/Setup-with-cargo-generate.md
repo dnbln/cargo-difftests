@@ -78,15 +78,15 @@ After all of that, it should output a big JSON with all the information it found
 specific test like so:
 
 ```Bash
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_add
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_sub
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_sub
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div_2
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div_2
 clean
 ```
 
@@ -94,15 +94,15 @@ Now let us touch a file and see what happens:
 
 ```Bash
 > touch src/lib.rs
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_add
 dirty
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_sub
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_sub
 dirty
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div_2
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div_2
 clean
 ```
 
@@ -113,15 +113,15 @@ by default). Let us rerun those tests now:
 ```Bash
 > cargo test --profile difftests test_add
 > cargo test --profile difftests test_sub
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_add
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_sub
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_sub
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div_2
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div_2
 clean
 ```
 
@@ -129,29 +129,29 @@ And now if we were to modify <path>src/advanced_arithmetic.rs</path>.
 
 ```Bash
 > touch src/advanced_arithmetic.rs
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_add
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_sub
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_sub
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 dirty
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 dirty
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div_2
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div_2
 dirty
 > # rerun tests
 > cargo test --profile difftests test_mul
 > cargo test --profile difftests test_div -- --exact
 > cargo test --profile difftests test_div_2
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_add
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_add
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/simple/test_sub
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_sub
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_mul
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_mul
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div
 clean
-> cargo difftests analyze --dir target/tmp/cargo-difftests/advanced/test_div_2
+> cargo difftests analyze --dir target/tmp/cargo-difftests/test_div_2
 clean
 ```
 
