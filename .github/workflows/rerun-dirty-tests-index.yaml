@@ -34,7 +34,7 @@ jobs:
         run: echo $OLD_COMMIT
 
       - name: Rerun dirty tests
-        uses: dnbln/cargo-difftests-rerun-dirty-action@c4b6c75ef1d443a5057c4810c19e55cdfc840a6e
+        uses: dnbln/cargo-difftests-rerun-dirty-action@d2f90755508c86b96777add42ac79428209c5b06
         with:
           commit-to-diff-with: ${{ env.OLD_COMMIT }}
           index-root: sample/cargo-difftests-sample-project/index_root
