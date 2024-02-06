@@ -1,0 +1,26 @@
+on:
+  push:
+    branches:
+      - trunk
+  pull_request:
+    branches:
+      - trunk
+
+jobs:
+  rerun-dirty-tests-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set old commit (push)
+        if: ${{ github.event.before != null }}
+        run: echo "OLD_COMMIT=${{ github.event.before }}" >> $GITHUB_ENV
+      - name: Set old commit (pull_request)
+        if: ${{ github.event.pull_request.base.sha != null }}
+        run: echo "OLD_COMMIT=${{ github.event.pull_request.base.sha }}" >> $GITHUB_ENV        
+
+      - name: Print old commit
+        run: echo ${{ github.env.OLD_COMMIT }}
+
+      - uses: dnbln/cargo-difftests-rerun-dirty-action@2619b6ff4cc3aee7a7d9812dca49022a3eeb17af
+        with:
+          commit-to-diff-with: ${{ github.env.OLD_COMMIT }}
+          index-root: sample/cargo-difftests-sample-project/index_root
