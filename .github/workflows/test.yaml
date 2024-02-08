@@ -24,15 +24,6 @@ jobs:
         
         - name: Install binutils
           run: cargo install cargo-binutils
-        
-        - name: Move config file
-          run: mv .cargo/config.toml .cargo/config2.toml
-
-        - name: Install required cargo-difftests helper binaries
-          run: cargo install --path cargo-difftests --bin rustc-wrapper-difftests --bin rustc-wrapper-difftests-workspace
-        
-        - name: Move config file back
-          run: mv .cargo/config2.toml .cargo/config.toml
 
         - name: Build
           run: cargo build

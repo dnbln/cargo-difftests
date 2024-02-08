@@ -36,10 +36,11 @@ jobs:
         run: echo $OLD_COMMIT
 
       - name: Rerun dirty tests
-        uses: dnbln/cargo-difftests-rerun-dirty-action@d2f90755508c86b96777add42ac79428209c5b06
+        uses: dnbln/cargo-difftests-rerun-dirty-action@d4cd2fcb92a5a3df9c2e830e632631a861bee86c
         with:
           commit-to-diff-with: ${{ env.OLD_COMMIT }}
-          index-root: sample/cargo-difftests-sample-project/index_root
+          index-root: indexes
           cargo-difftests-crate-path: cargo-difftests
         env:
-          CARGO_DIFFTESTS_LOG: debug
+          CARGO_DIFFTESTS_LOG: warn
+          CARGO_DIFFTESTS_EXTRA_ARGS: "--compile-index,--and-clean,--index-root=indexes,--bin=target/debug/cargo-difftests,--flatten-files-to=repo-root"
