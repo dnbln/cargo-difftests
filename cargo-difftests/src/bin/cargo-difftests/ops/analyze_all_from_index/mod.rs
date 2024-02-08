@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use cargo_difftests::{
     analysis::{AnalysisConfig, AnalysisContext},
@@ -9,7 +9,7 @@ use clap::Parser;
 use prodash::unit;
 
 use crate::{
-    cli_core::{AlgoArgs, AnalyzeAllActionArgs, DirtyAlgorithm},
+    cli_core::{AlgoArgs, AnalysisIndex, AnalyzeAllActionArgs, DifftestsRootRequired, DirtyAlgorithm, ExportProfdataConfigFlags, IgnoreRegistryFilesFlag},
     ops::core::discover_indexes_to_vec,
     CargoDifftestsResult,
 };
@@ -18,11 +18,11 @@ use crate::{
 pub struct AnalyzeAllFromIndexCommand {
     /// The root directory where all the index files are stored.
     #[clap(long)]
-    index_root: PathBuf,
+    pub(crate) index_root: PathBuf,
     #[clap(flatten)]
-    algo: AlgoArgs,
+    pub(crate) algo: AlgoArgs,
     #[clap(flatten)]
-    action_args: AnalyzeAllActionArgs,
+    pub(crate) action_args: AnalyzeAllActionArgs,
 }
 
 impl AnalyzeAllFromIndexCommand {

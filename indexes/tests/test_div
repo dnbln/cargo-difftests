@@ -1,0 +1,1 @@
+{"files":["sample/cargo-difftests-sample-project/tests/tests.rs","sample/cargo-difftests-sample-project/src/advanced_arithmetic.rs"],"test_run":"2024-02-08T17:23:41.049317Z","test_info":{"test_name":"test_div","test_binary":"C:\\Users\\dinub\\proj\\cargo-difftests\\target\\debug\\deps\\tests-4ba5c675a9787dee.exe","extra_desc":null}}

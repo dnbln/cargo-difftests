@@ -5,19 +5,16 @@ use clap::Parser;
 use prodash::unit;
 
 use crate::{
-    cli_core::{AnalysisIndex, DifftestsRoot, ExportProfdataConfigFlags, IgnoreRegistryFilesFlag},
+    cli_core::{AnalysisIndex, DifftestsRoot, DifftestsRootRequired, ExportProfdataConfigFlags, IgnoreRegistryFilesFlag},
     CargoDifftestsResult,
 };
 
-use super::core::{collect_test_harnesses, compile_test_index_config, get_difftests_dir};
+use super::core::{collect_test_harnesses, compile_test_index_config};
 
 #[derive(Parser, Debug)]
 pub struct CollectProfilingDataCommand {
     #[clap(flatten)]
-    root: DifftestsRoot,
-
-    #[clap(long)]
-    compile_index: bool,
+    root: DifftestsRootRequired,
 
     #[clap(flatten)]
     export_profdata_args: ExportProfdataConfigFlags,
@@ -41,7 +38,7 @@ impl CollectProfilingDataCommand {
             ctxt,
             self.root.root,
             self.export_profdata_args,
-            self.compile_index,
+            self.index_compilation_args.compile_index,
             self.index_compilation_args,
             self.ignore_registry_files,
             self.filter,
@@ -52,7 +49,7 @@ impl CollectProfilingDataCommand {
 
 fn run_collect_profiling_data(
     ctxt: &CargoDifftestsContext,
-    root: Option<PathBuf>,
+    root: PathBuf,
     export_profdata_args: ExportProfdataConfigFlags,
     compile_index: bool,
     index_compilation_args: AnalysisIndex,
@@ -60,12 +57,7 @@ fn run_collect_profiling_data(
     filter: Option<String>,
     exact: bool,
 ) -> CargoDifftestsResult {
-    let root_difftests_dir = match root {
-        Some(r) => r,
-        None => get_difftests_dir()?,
-    };
-
-    let index_resolver = index_compilation_args.index_resolver(Some(root_difftests_dir.clone()))?;
+    let index_resolver = index_compilation_args.index_resolver(Some(root.clone()))?;
 
     let mut pb = ctxt.new_child("Collecting profiling data for tests");
     pb.init(Some(1), None);
@@ -110,7 +102,7 @@ fn run_collect_profiling_data(
         let harness_name = test.get_harness_name().clone();
         let name = test.get_name().clone();
 
-        let difftest_dir = root_difftests_dir.join(&harness_name).join(&name);
+        let difftest_dir = root.join(&harness_name).join(&name);
 
         let mut test_pb = tests_pb.add_child(&format!("{}::{}", harness_name, name));
         test_pb.init(Some(1), Some(unit::label("test")));
@@ -133,16 +125,13 @@ fn run_collect_profiling_data(
 
         std::fs::write(
             difftest_dir.join(cargo_difftests_core::CARGO_DIFFTESTS_VERSION_FILENAME),
-            env!("CARGO_PKG_VERSION")
+            env!("CARGO_PKG_VERSION"),
         )?;
 
         match test.run_test_and_collect_profiling_data(&difftest_dir) {
             Ok(_) => {
                 if compile_index {
                     if let Some(index_resolver) = index_resolver.as_ref() {
-                        let mut index_pb = test_pb.add_child("Compiling index");
-                        index_pb.init(Some(1), Some(unit::label("index")));
-
                         let mut difftest =
                             Difftest::discover_from(difftest_dir.clone(), Some(index_resolver))?;
 
@@ -157,10 +146,13 @@ fn run_collect_profiling_data(
                         )?;
 
                         if let Some(path) = index_resolver.resolve(&difftest_dir) {
+                            if let Some(p) = path.parent() {
+                                if !p.exists() {
+                                    std::fs::create_dir_all(p)?;
+                                }
+                            }
                             index_data.write_to_file(&path)?;
                         }
-
-                        index_pb.done("done");
                     }
                 }
 

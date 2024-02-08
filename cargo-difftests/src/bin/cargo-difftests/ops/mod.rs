@@ -2,7 +2,7 @@ use clap::Parser;
 
 use crate::{CargoDifftestsContext, CargoDifftestsResult};
 
-mod core;
+pub(crate) mod core;
 
 mod analyze;
 mod analyze_all;
@@ -10,6 +10,7 @@ mod analyze_all_from_index;
 mod collect_profiling_data;
 mod discover_difftests;
 mod low_level;
+mod rerun_dirty_from_indexes;
 
 #[derive(Parser, Debug)]
 pub enum App {
@@ -41,10 +42,17 @@ pub enum App {
         #[clap(flatten)]
         cmd: analyze_all_from_index::AnalyzeAllFromIndexCommand,
     },
+    /// Collect profiling data for all the tests known to cargo.
     CollectProfilingData {
         #[clap(flatten)]
         cmd: collect_profiling_data::CollectProfilingDataCommand,
     },
+    /// Rerun dirty difftests from their indexes.
+    RerunDirtyFromIndexes {
+        #[clap(flatten)]
+        cmd: rerun_dirty_from_indexes::RerunDirtyFromIndexesCommand,
+    },
+    /// Low-level commands for debugging and development.
     LowLevel {
         #[clap(subcommand)]
         cmd: low_level::LowLevelCommand,
@@ -66,6 +74,9 @@ impl App {
                 cmd.run(ctxt)?;
             }
             App::CollectProfilingData { cmd } => {
+                cmd.run(ctxt)?;
+            }
+            App::RerunDirtyFromIndexes { cmd } => {
                 cmd.run(ctxt)?;
             }
             App::LowLevel { cmd } => {

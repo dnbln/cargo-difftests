@@ -12,11 +12,13 @@ use cargo_difftests::{
     AnalysisVerdict, AnalyzeAllSingleTest, IndexCompareDifferences, TouchSameFilesDifference,
 };
 use clap::{Args, ValueEnum};
-use log::info;
+use log::{error, info};
 use prodash::unit;
 
-use crate::{CargoDifftestsContext, CargoDifftestsResult};
-use cargo_difftests::test_rerunner_core::State as TestRunnerState;
+use crate::{
+    ops::{self, core::cargo_bin_path},
+    CargoDifftestsContext, CargoDifftestsResult,
+};
 
 #[derive(ValueEnum, Debug, Copy, Clone)]
 pub enum FlattenFilesTarget {
@@ -40,6 +42,17 @@ pub struct CompileTestIndexFlags {
     /// Whether to flatten all files to a directory.
     #[clap(long)]
     pub flatten_files_to: Option<FlattenFilesTarget>,
+    /// Whether to remove the binary path from the difftest info
+    /// in the index.
+    ///
+    /// This is enabled by default, as it is expected to be an absolute
+    /// path.
+    #[clap(
+        long = "no-remove-bin-path",
+        default_value_t = true,
+        action = clap::ArgAction::SetFalse,
+    )]
+    pub remove_bin_path: bool,
     /// Whether to generate a full index, or a tiny index.
     ///
     /// The difference lies in the fact that the full index will contain
@@ -69,6 +82,7 @@ impl Default for CompileTestIndexFlags {
     fn default() -> Self {
         Self {
             flatten_files_to: Some(FlattenFilesTarget::RepoRoot),
+            remove_bin_path: true,
             full_index: false,
             #[cfg(windows)]
             path_slash_replace: true,
@@ -251,6 +265,8 @@ impl Display for DirtyAlgorithm {
 
 #[derive(Args, Debug)]
 pub struct AnalysisIndex {
+    #[clap(long)]
+    pub compile_index: bool,
     /// The root directory where all index files will be stored.
     ///
     /// Only used if `--index-strategy` is set to `always`, `always-and-clean`
@@ -273,6 +289,8 @@ pub struct AnalysisIndex {
 
 #[derive(thiserror::Error, Debug)]
 pub enum IndexResolverError {
+    #[error("--index-root was not provided, but was required by the --index-strategy")]
+    IndexRootIsNone,
     #[error("--root was not provided, but was required by the --index-strategy")]
     RootIsNone,
 }
@@ -282,9 +300,18 @@ impl AnalysisIndex {
         &self,
         root: Option<PathBuf>,
     ) -> Result<Option<DiscoverIndexPathResolver>, IndexResolverError> {
-        match self.index_strategy {
+        let index_s = if self.compile_index {
+            AnalysisIndexStrategy::Always
+        } else {
+            self.index_strategy
+        };
+
+        match index_s {
             AnalysisIndexStrategy::Always | AnalysisIndexStrategy::AlwaysAndClean => {
-                let index_root = self.index_root.as_ref().unwrap(); // should be set by clap
+                let index_root = self
+                    .index_root
+                    .as_ref()
+                    .ok_or(IndexResolverError::IndexRootIsNone)?; // should be set by clap
 
                 Ok(Some(DiscoverIndexPathResolver::Remap {
                     from: root.ok_or(IndexResolverError::RootIsNone)?,
@@ -292,7 +319,10 @@ impl AnalysisIndex {
                 }))
             }
             AnalysisIndexStrategy::IfAvailable => {
-                let index_root = self.index_root.as_ref().unwrap(); // should be set by clap
+                let index_root = self
+                    .index_root
+                    .as_ref()
+                    .ok_or(IndexResolverError::IndexRootIsNone)?; // should be set by clap
 
                 Ok(Some(DiscoverIndexPathResolver::Remap {
                     from: root.ok_or(IndexResolverError::RootIsNone)?,
@@ -351,7 +381,7 @@ pub struct IgnoreRegistryFilesFlag {
 #[derive(Args, Debug, Clone)]
 pub struct ExportProfdataConfigFlags {
     #[clap(flatten)]
-    other_binaries: OtherBinaries,
+    pub other_binaries: OtherBinaries,
 }
 
 impl ExportProfdataConfigFlags {
@@ -424,109 +454,7 @@ impl AnalyzeAllActionArgs {
                 }
             }
             AnalyzeAllActionKind::RerunDirty => {
-                let invocation =
-                    cargo_difftests::test_rerunner_core::TestRerunnerInvocation::create_invocation_from(
-                        results
-                        .iter()
-                        .filter(|r| r.verdict == AnalysisVerdict::Dirty),
-                    )?;
-
-                if invocation.is_empty() {
-                    return Ok(());
-                }
-
-                let mut pb = ctxt.new_child("Rerunning dirty tests");
-                pb.init(Some(1), Some(unit::label("test sets")));
-
-                let invocation_str = serde_json::to_string(&invocation)?;
-
-                let mut invocation_file = tempfile::NamedTempFile::new()?;
-                write!(&mut invocation_file, "{}", invocation_str)?;
-                invocation_file.flush()?;
-
-                let mut cmd = std::process::Command::new(&self.runner.runner);
-                cmd.arg(invocation_file.path())
-                    .env(
-                        cargo_difftests::test_rerunner_core::CARGO_DIFFTESTS_VER_NAME,
-                        env!("CARGO_PKG_VERSION"),
-                    )
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped());
-
-                let mut child = cmd.spawn()?;
-
-                let mut stdout_child = child.stdout.take().unwrap();
-                let mut stderr_child = child.stderr.take().unwrap();
-
-                let tests = pb.add_child("Tests");
-                let handle = std::thread::spawn(move || {
-                    let mut tests = tests;
-                    let mut tests_initialized = false;
-                    for line in std::io::BufReader::new(&mut stdout_child).lines() {
-                        let line = line?;
-                        if line.starts_with("cargo-difftests-test-counts::") {
-                            let l = line.trim_start_matches("cargo-difftests-test-counts::");
-                            let counts: TestRunnerState = serde_json::from_str(l)?;
-                            match counts {
-                                TestRunnerState::None => {}
-                                TestRunnerState::Running {
-                                    current_test_count,
-                                    total_test_count,
-                                } => {
-                                    if !tests_initialized {
-                                        tests.init(
-                                            Some(total_test_count),
-                                            Some(unit::label("tests")),
-                                        );
-                                        tests_initialized = true;
-                                    }
-
-                                    tests.set(current_test_count);
-                                }
-                                TestRunnerState::Done => {
-                                    tests.done("Tests are done");
-                                }
-                                TestRunnerState::Error => {
-                                    tests.fail("Tests failed");
-                                }
-                            }
-                        } else if line.starts_with("cargo-difftests-start-test::") {
-                            let t = line.trim_start_matches("cargo-difftests-start-test::");
-                            tests.info(format!("Running test {t}"));
-                        } else if line.starts_with("cargo-difftests-test-successful::") {
-                            let t = line.trim_start_matches("cargo-difftests-test-successful::");
-                            tests.info(format!("Test {t} successful"));
-                        } else if line.starts_with("cargo-difftests-test-failed::") {
-                            let t = line.trim_start_matches("cargo-difftests-test-failed::");
-                            tests.info(format!("Test {t} failed"));
-                        } else {
-                            info!("rerun stdout: {line}");
-                        }
-                    }
-
-                    Ok::<_, anyhow::Error>(())
-                });
-
-                let status = child.wait()?;
-
-                handle.join().unwrap()?;
-
-                for line in std::io::BufReader::new(&mut stderr_child).lines() {
-                    let line = line?;
-                    info!("rerun stderr: {line}");
-                }
-
-                pb.inc();
-
-                match status.exit_ok() {
-                    Ok(()) => {
-                        pb.done("Rerun successful");
-                    }
-                    Err(e) => {
-                        pb.fail("Rerun failed");
-                        bail!(e);
-                    }
-                }
+                ops::core::rerun_dirty(&ctxt, results, &self.runner)?;
             }
         }
         Ok(())
@@ -541,8 +469,47 @@ pub struct DifftestsRoot {
     /// to the index files, and is therefore only required if the
     /// `--index-strategy` is `always`, `always-and-clean`, or
     /// `if-available`.
-    #[clap(long)]
+    #[clap(long, env = "CARGO_DIFFTESTS_ROOT", default_value = get_default_difftests_dir().unwrap())]
     pub root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct DifftestsRootRequired {
+    /// The root directory where all the difftests were stored.
+    ///
+    /// Needs to be known to be able to properly remap the paths
+    /// to the index files, and is therefore only required if the
+    /// `--index-strategy` is `always`, `always-and-clean`, or
+    /// `if-available`.
+    #[clap(long, env = "CARGO_DIFFTESTS_ROOT", default_value = get_default_difftests_dir().unwrap())]
+    pub root: PathBuf,
+}
+
+pub fn get_target_dir() -> CargoDifftestsResult<PathBuf> {
+    #[derive(serde::Deserialize)]
+    struct Meta {
+        target_directory: PathBuf,
+    }
+
+    let o = std::process::Command::new(cargo_bin_path())
+        .args(&["metadata", "--no-deps", "--format-version", "1"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()?;
+
+    if !o.status.success() {
+        let stderr = String::from_utf8(o.stderr)?;
+        error!("cargo metadata failed:\n{}", stderr);
+        bail!("cargo metadata failed: {}", stderr);
+    }
+
+    let meta: Meta = serde_json::from_slice(&o.stdout)?;
+    Ok(meta.target_directory)
+}
+
+fn get_default_difftests_dir() -> CargoDifftestsResult<OsString> {
+    let target_dir = get_target_dir()?;
+    Ok(target_dir.join("tmp").join("difftests").into_os_string())
 }
 
 #[derive(Args, Debug, Clone)]

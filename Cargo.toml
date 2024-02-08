@@ -22,7 +22,7 @@ cargo-difftests-testclient = { path = "cargo-difftests-testclient", version = "0
 
 anyhow = "1.0.66"
 chrono = { version = "0.4.23", features = ["serde"] }
-clap = { version = "4.0.26", features = ["derive", "string"] }
+clap = { version = "4.0.26", features = ["derive", "string", "env"] }
 git2 = "0.18"
 home = "0.5.4"
 indoc = "2"

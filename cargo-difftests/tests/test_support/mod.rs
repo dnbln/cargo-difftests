@@ -123,7 +123,7 @@ impl CargoProject {
 
     pub fn run_all_tests_difftests(&self) -> R {
         let mut cmd = self._internal_cargo_difftests_cmd()?;
-        cmd.args(&["collect-profiling-data"]);
+        cmd.args(&["collect-profiling-data", "--index-strategy=never"]);
 
         let output = cmd.output()?;
 

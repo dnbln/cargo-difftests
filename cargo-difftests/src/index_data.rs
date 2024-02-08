@@ -106,6 +106,10 @@ impl TestIndex {
             test_info: difftest.test_info()?,
         };
 
+        if index_data_compiler_config.remove_bin_path {
+            index_data.test_info.test_binary = PathBuf::new();
+        }
+
         let mut mapping_files = BTreeMap::<PathBuf, usize>::new();
 
         for mapping in &profdata.data {
@@ -166,6 +170,8 @@ impl TestIndex {
 pub struct IndexDataCompilerConfig {
     /// Whether to ignore files in the cargo registry.
     pub ignore_registry_files: bool,
+    /// Whether or not to remove the binary path from the index.
+    pub remove_bin_path: bool,
     /// A conversion function for the file names in the index.
     /// This is useful for converting absolute paths to paths
     /// relative to the repository root for example.

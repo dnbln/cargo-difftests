@@ -1,24 +1,29 @@
 use std::{
     ffi::{OsStr, OsString},
     fs,
+    io::{BufRead, Write},
     path::{Path, PathBuf},
 };
 
 use anyhow::{bail, Context};
 use cargo_difftests::{
     analysis::{file_is_from_cargo_registry, AnalysisConfig, AnalysisContext, AnalysisResult},
+    bin_context::CargoDifftestsContext,
     difftest::{Difftest, DiscoverIndexPathResolver},
-    index_data::{IndexDataCompilerConfig, IndexSize, TestIndex},
+    index_data::{IndexDataCompilerConfig, IndexSize, TestIndex}, AnalysisVerdict,
 };
-use log::{error, warn};
+use log::{error, info, warn};
+use prodash::unit;
 
 use crate::{
     cli_core::{
         AnalysisIndex, AnalysisIndexStrategy, CompileTestIndexFlags, DirtyAlgorithm,
-        ExportProfdataConfigFlags, FlattenFilesTarget, IgnoreRegistryFilesFlag,
+        ExportProfdataConfigFlags, FlattenFilesTarget, IgnoreRegistryFilesFlag, RerunRunner,
     },
     CargoDifftestsResult,
 };
+
+use cargo_difftests::test_rerunner_core::State as TestRunnerState;
 
 pub fn analyze_single_test(
     difftest: &mut Difftest,
@@ -157,6 +162,7 @@ pub fn compile_test_index_config(
 
     let config = IndexDataCompilerConfig {
         ignore_registry_files: true,
+        remove_bin_path: compile_test_index_flags.remove_bin_path,
         index_filename_converter: Box::new(move |path| {
             let p = match &flatten_root {
                 Some(root) => path.strip_prefix(root).unwrap_or(path),
@@ -250,7 +256,10 @@ impl TestHarness {
         let output = std::process::Command::new(&self.0)
             .args(&["--list", "--format=terse"])
             .stdout(std::process::Stdio::piped())
-            .env("LLVM_PROFILE_FILE", std::env::temp_dir().join("%m_%p.profraw"))
+            .env(
+                "LLVM_PROFILE_FILE",
+                std::env::temp_dir().join("%m_%p.profraw"),
+            )
             .output()?;
 
         if !output.status.success() {
@@ -381,34 +390,111 @@ pub fn collect_test_harnesses() -> CargoDifftestsResult<Vec<TestHarness>> {
     Ok(harnesses)
 }
 
-pub fn get_target_dir() -> CargoDifftestsResult<PathBuf> {
-    #[derive(serde::Deserialize)]
-    struct Meta {
-        target_directory: PathBuf,
+pub fn rerun_dirty(
+    ctxt: &CargoDifftestsContext,
+    results: &[cargo_difftests::AnalyzeAllSingleTest],
+    rerun_runner: &RerunRunner,
+) -> CargoDifftestsResult {
+    let invocation =
+        cargo_difftests::test_rerunner_core::TestRerunnerInvocation::create_invocation_from(
+            results
+                .iter()
+                .filter(|r| r.verdict == AnalysisVerdict::Dirty),
+        )?;
+
+    if invocation.is_empty() {
+        return Ok(());
     }
 
-    let o = std::process::Command::new(cargo_bin_path())
-        .args(&["metadata", "--no-deps", "--format-version", "1"])
+    let mut pb = ctxt.new_child("Rerunning dirty tests");
+    pb.init(Some(1), Some(unit::label("test sets")));
+
+    let invocation_str = serde_json::to_string(&invocation)?;
+
+    let mut invocation_file = tempfile::NamedTempFile::new()?;
+    write!(&mut invocation_file, "{}", invocation_str)?;
+    invocation_file.flush()?;
+
+    let mut cmd = std::process::Command::new(&rerun_runner.runner);
+    cmd.arg(invocation_file.path())
+        .env(
+            cargo_difftests::test_rerunner_core::CARGO_DIFFTESTS_VER_NAME,
+            env!("CARGO_PKG_VERSION"),
+        )
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()?;
+        .stderr(std::process::Stdio::piped());
 
-    if !o.status.success() {
-        let stderr = String::from_utf8(o.stderr)?;
-        error!("cargo metadata failed:\n{}", stderr);
-        bail!("cargo metadata failed: {}", stderr);
+    let mut child = cmd.spawn()?;
+
+    let mut stdout_child = child.stdout.take().unwrap();
+    let mut stderr_child = child.stderr.take().unwrap();
+
+    let tests = pb.add_child("Tests");
+    let handle = std::thread::spawn(move || {
+        let mut tests = tests;
+        let mut tests_initialized = false;
+        for line in std::io::BufReader::new(&mut stdout_child).lines() {
+            let line = line?;
+            if line.starts_with("cargo-difftests-test-counts::") {
+                let l = line.trim_start_matches("cargo-difftests-test-counts::");
+                let counts: TestRunnerState = serde_json::from_str(l)?;
+                match counts {
+                    TestRunnerState::None => {}
+                    TestRunnerState::Running {
+                        current_test_count,
+                        total_test_count,
+                    } => {
+                        if !tests_initialized {
+                            tests.init(Some(total_test_count), Some(unit::label("tests")));
+                            tests_initialized = true;
+                        }
+
+                        tests.set(current_test_count);
+                    }
+                    TestRunnerState::Done => {
+                        tests.done("Tests are done");
+                    }
+                    TestRunnerState::Error => {
+                        tests.fail("Tests failed");
+                    }
+                }
+            } else if line.starts_with("cargo-difftests-start-test::") {
+                let t = line.trim_start_matches("cargo-difftests-start-test::");
+                tests.info(format!("Running test {t}"));
+            } else if line.starts_with("cargo-difftests-test-successful::") {
+                let t = line.trim_start_matches("cargo-difftests-test-successful::");
+                tests.info(format!("Test {t} successful"));
+            } else if line.starts_with("cargo-difftests-test-failed::") {
+                let t = line.trim_start_matches("cargo-difftests-test-failed::");
+                tests.info(format!("Test {t} failed"));
+            } else {
+                info!("rerun stdout: {line}");
+            }
+        }
+
+        Ok::<_, anyhow::Error>(())
+    });
+
+    let status = child.wait()?;
+
+    handle.join().unwrap()?;
+
+    for line in std::io::BufReader::new(&mut stderr_child).lines() {
+        let line = line?;
+        info!("rerun stderr: {line}");
     }
 
-    let meta: Meta = serde_json::from_slice(&o.stdout)?;
-    Ok(meta.target_directory)
-}
+    pb.inc();
 
-pub fn get_difftests_dir() -> CargoDifftestsResult<PathBuf> {
-    match std::env::var_os("CARGO_DIFFTESTS_ROOT") {
-        Some(p) => Ok(PathBuf::from(p)),
-        None => {
-            let target_dir = get_target_dir()?;
-            Ok(target_dir.join("tmp").join("difftests"))
+    match status.exit_ok() {
+        Ok(()) => {
+            pb.done("Rerun successful");
+        }
+        Err(e) => {
+            pb.fail("Rerun failed");
+            bail!(e);
         }
     }
+
+    Ok(())
 }
