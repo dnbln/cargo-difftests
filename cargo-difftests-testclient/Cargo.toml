@@ -11,17 +11,13 @@ repository.workspace = true
 rustc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["enforce-single-running-test", "groups", "parallel-groups"]
-enforce-single-running-test = []
-groups = ["enforce-single-running-test", "cargo-difftests-core/groups"]
-parallel-groups = ["groups"]
+default = []
 compile-index-and-clean = []
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 cargo-difftests-core.workspace = true
-cargo-difftests-testclient-macros.workspace = true
 libc.workspace = true
 log.workspace = true
 serde.workspace = true

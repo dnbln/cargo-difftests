@@ -35,9 +35,11 @@ use crate::{analysis_data, DifftestsError, DifftestsResult};
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Difftest {
     pub(crate) dir: PathBuf,
-    pub(crate) self_profraw: PathBuf,
-    pub(crate) other_profraws: Vec<PathBuf>,
-    pub(crate) self_json: PathBuf,
+    pub(crate) test_binary_path: PathBuf,
+    pub(crate) test_name_path: PathBuf,
+    pub(crate) profraws: Vec<PathBuf>,
+    pub(crate) self_json: Option<PathBuf>,
+    pub(crate) test_run_time: std::time::SystemTime,
     pub(crate) profdata_file: Option<PathBuf>,
     pub(crate) index_data: Option<PathBuf>,
 
@@ -61,6 +63,24 @@ impl Difftest {
         self.index_data.is_some()
     }
 
+    fn read_test_binary_path(&self) -> DifftestsResult<PathBuf> {
+        let s = fs::read_to_string(&self.test_binary_path)?;
+        Ok(PathBuf::from(s))
+    }
+
+    pub fn test_info(&self) -> DifftestsResult<TestInfo> {
+        let test_name = std::fs::read_to_string(&self.test_name_path)?;
+        let test_binary = self.read_test_binary_path()?;
+
+        let extra_desc = self.load_test_desc()?;
+
+        Ok(TestInfo {
+            test_name,
+            test_binary,
+            extra_desc,
+        })
+    }
+
     /// Reads the [`TestIndex`] data associated with the [`Difftest`].
     ///
     /// Returns `Ok(None)` if the [`Difftest`] does not have an associated index file.
@@ -72,24 +92,25 @@ impl Difftest {
         TestIndex::read_from_file(index_data).map(Some)
     }
 
-    pub(crate) fn self_json_mtime(&self) -> DifftestsResult<std::time::SystemTime> {
-        Ok(fs::metadata(&self.self_json)?.modified()?)
+    pub(crate) fn test_run_time(&self) -> std::time::SystemTime {
+        self.test_run_time
     }
 
     /// Loads the `self.json` file from the test directory, and parses it into
     /// a [`CoreTestDesc`] value.
-    pub fn load_test_desc(&self) -> DifftestsResult<CoreTestDesc> {
-        let s = fs::read_to_string(&self.self_json)?;
-        let desc = serde_json::from_str(&s)
-            .map_err(|e| DifftestsError::Json(e, Some(self.self_json.clone())))?;
-        Ok(desc)
+    pub fn load_test_desc(&self) -> DifftestsResult<Option<CoreTestDesc>> {
+        if let Some(self_json) = self.self_json.as_ref() {
+            let s = fs::read_to_string(self_json)?;
+            let desc = serde_json::from_str(&s)
+                .map_err(|e| DifftestsError::Json(e, Some(self_json.clone())))?;
+            Ok(desc)
+        } else {
+            Ok(None)
+        }
     }
 
     /// Merges the `.profraw` files into a `.profdata` file, via `llvm-profdata merge`.
-    pub fn merge_profraw_files_into_profdata(
-        &mut self,
-        force: bool,
-    ) -> DifftestsResult<()> {
+    pub fn merge_profraw_files_into_profdata(&mut self, force: bool) -> DifftestsResult<()> {
         if self.cleaned {
             return Err(DifftestsError::DifftestCleaned);
         }
@@ -123,9 +144,7 @@ impl Difftest {
 
         clean_file(&mut self.profdata_file)?;
 
-        fs::write(&self.self_profraw, b"")?;
-
-        for profraw in self.other_profraws.drain(..) {
+        for profraw in self.profraws.drain(..) {
             fs::remove_file(profraw)?;
         }
 
@@ -156,18 +175,24 @@ impl Difftest {
         dir: PathBuf,
         index_resolver: Option<&DiscoverIndexPathResolver>,
     ) -> DifftestsResult<Self> {
-        let self_json = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_JSON_FILENAME);
+        let test_name_path = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_TEST_NAME_FILENAME);
 
-        if !self_json.exists() || !self_json.is_file() {
-            return Err(DifftestsError::SelfJsonDoesNotExist(self_json));
+        if !test_name_path.exists() {
+            return Err(DifftestsError::IO(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!(
+                    "test name file does not exist: {}",
+                    test_name_path.display()
+                ),
+            )));
         }
 
-        discover_difftest_from_tempdir(dir, self_json, index_resolver)
+        discover_difftest_from_tempdir(dir, test_name_path, index_resolver)
     }
 
     /// Reads the `.profdata` profiling data file, to be able to use
     /// it for analysis.
-    /// 
+    ///
     /// This function should be ran after
     /// [`Difftest::merge_profraw_files_into_profdata`].
     pub fn export_profdata(
@@ -204,7 +229,7 @@ impl Difftest {
     ///
     /// See the [`AnalysisContext`] type and the [`analysis`](crate::analysis)
     /// module for how to perform the analysis.
-    /// 
+    ///
     /// This function should be ran after
     /// [`Difftest::merge_profraw_files_into_profdata`].
     pub fn start_analysis(
@@ -238,6 +263,7 @@ impl Difftest {
 
 /// The configuration to use when exporting a `.profdata` file
 /// into a `.json` file.
+#[derive(Clone)]
 pub struct ExportProfdataConfig {
     /// Whether to ignore files from the cargo registry.
     pub ignore_registry_files: bool,
@@ -294,13 +320,21 @@ impl DiscoverIndexPathResolver {
 
 fn discover_difftest_from_tempdir(
     dir: PathBuf,
-    self_json: PathBuf,
+    test_name_path: PathBuf,
     index_resolver: Option<&DiscoverIndexPathResolver>,
 ) -> DifftestsResult<Difftest> {
-    let self_profraw = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_PROFILE_FILENAME);
+    let self_json = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_JSON_FILENAME);
 
-    if !self_profraw.exists() {
-        return Err(DifftestsError::SelfProfrawDoesNotExist(self_profraw));
+    let self_json = self_json.exists().then_some(self_json);
+
+    if !test_name_path.exists() {
+        return Err(DifftestsError::IO(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "test name file does not exist: {}",
+                test_name_path.display()
+            ),
+        )));
     }
 
     let cargo_difftests_version = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_VERSION_FILENAME);
@@ -320,7 +354,21 @@ fn discover_difftest_from_tempdir(
         ));
     }
 
-    let mut other_profraws = Vec::new();
+    let test_binary_path = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_TEST_BINARY_FILENAME);
+
+    if !test_binary_path.exists() {
+        return Err(DifftestsError::IO(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "test binary file does not exist: {}",
+                test_binary_path.display()
+            ),
+        )));
+    }
+
+    let test_run = test_binary_path.metadata()?.modified()?;
+
+    let mut profraws = Vec::new();
 
     let mut profdata_file = None;
 
@@ -337,13 +385,8 @@ fn discover_difftest_from_tempdir(
         let file_name = p.file_name();
         let ext = p.extension();
 
-        if ext == Some(OsStr::new("profraw"))
-            && file_name
-                != Some(OsStr::new(
-                    cargo_difftests_core::CARGO_DIFFTESTS_SELF_PROFILE_FILENAME,
-                ))
-        {
-            other_profraws.push(p);
+        if ext == Some(OsStr::new("profraw")) {
+            profraws.push(p);
             continue;
         }
 
@@ -377,13 +420,8 @@ fn discover_difftest_from_tempdir(
                 break 'index_data None;
             }
 
-            if ind.metadata()?.modified()? < self_json.metadata()?.modified()? {
-                warn!(
-                    "index data file is older than {}: {} older than {}",
-                    cargo_difftests_core::CARGO_DIFFTESTS_SELF_JSON_FILENAME,
-                    ind.display(),
-                    self_json.display()
-                );
+            if ind.metadata()?.modified()? < test_run {
+                warn!("index data file is older than test run");
                 break 'index_data None;
             }
         }
@@ -393,9 +431,11 @@ fn discover_difftest_from_tempdir(
 
     Ok(Difftest {
         dir,
-        self_profraw,
-        other_profraws,
+        test_binary_path,
+        test_name_path,
+        profraws,
         self_json,
+        test_run_time: test_run,
         profdata_file,
         index_data,
         cleaned,
@@ -408,9 +448,9 @@ fn discover_difftests_to_vec(
     ignore_incompatible: bool,
     index_resolver: Option<&DiscoverIndexPathResolver>,
 ) -> DifftestsResult {
-    let self_json = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_SELF_JSON_FILENAME);
-    if self_json.exists() && self_json.is_file() {
-        let r = discover_difftest_from_tempdir(dir.to_path_buf(), self_json, index_resolver);
+    let test_name_path = dir.join(cargo_difftests_core::CARGO_DIFFTESTS_TEST_NAME_FILENAME);
+    if test_name_path.exists() && test_name_path.is_file() {
+        let r = discover_difftest_from_tempdir(dir.to_path_buf(), test_name_path, index_resolver);
 
         if let Err(DifftestsError::CargoDifftestsVersionMismatch(_, _)) = r {
             if ignore_incompatible {
@@ -456,9 +496,7 @@ pub trait ProfrawsMergeable {
 
 impl ProfrawsMergeable for Difftest {
     fn list_profraws(&self) -> impl Iterator<Item = &Path> {
-        std::iter::once(&self.self_profraw)
-            .chain(self.other_profraws.iter())
-            .map(PathBuf::as_path)
+        self.profraws.iter().map(PathBuf::as_path)
     }
 
     fn out_profdata_path(&self) -> PathBuf {
@@ -512,7 +550,7 @@ impl<'a> ProfDataExportable for ProfdataExportableWrapper<'a> {
     }
 
     fn main_bin_path(&self) -> DifftestsResult<PathBuf> {
-        Ok(self.difftest.load_test_desc()?.bin_path)
+        self.difftest.read_test_binary_path()
     }
 
     fn other_bins(&self) -> impl Iterator<Item = &Path> {
@@ -615,4 +653,12 @@ pub fn export_profdata_file(
     };
 
     Ok(r)
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct TestInfo {
+    pub test_name: String,
+    pub test_binary: PathBuf,
+
+    pub extra_desc: Option<CoreTestDesc>,
 }

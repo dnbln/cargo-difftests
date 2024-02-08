@@ -32,8 +32,8 @@ fn simple_test(
         project.test_code(
             "add",
             r#"
-    #[cargo_difftests_testclient::test]
-    fn test_add(_: &DifftestsEnv) {
+    #[test]
+    fn test_add() {
         assert_eq!(add(1, 2), 3);
     }
     "#,
@@ -48,19 +48,19 @@ fn simple_test(
     };
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     project.touch_file("src/lib.rs")?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_dirty()?;
 
     project.run_test_difftests("test_add")?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     Ok(())
@@ -100,81 +100,81 @@ fn sample_project_test(
     };
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_dirty()?;
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_dirty()?;
     project
-        .analyze_test("test_mul", &strategy)?
+        .analyze_test("tests", "test_mul", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_div", &strategy)?
+        .analyze_test("tests", "test_div", &strategy)?
         .assert_is_clean()?;
 
     project.run_test_difftests("test_add")?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_dirty()?;
 
     project.run_test_difftests("test_sub")?;
 
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_mul", &strategy)?
+        .analyze_test("tests", "test_mul", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_div", &strategy)?
+        .analyze_test("tests", "test_div", &strategy)?
         .assert_is_clean()?;
 
     project.touch_file("src/advanced_arithmetic.rs")?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_mul", &strategy)?
+        .analyze_test("tests", "test_mul", &strategy)?
         .assert_is_dirty()?;
     project
-        .analyze_test("test_div", &strategy)?
+        .analyze_test("tests", "test_div", &strategy)?
         .assert_is_dirty()?;
 
     project.run_test_difftests("test_mul")?;
 
     project
-        .analyze_test("test_mul", &strategy)?
+        .analyze_test("tests", "test_mul", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_div", &strategy)?
+        .analyze_test("tests", "test_div", &strategy)?
         .assert_is_dirty()?;
 
     project.run_test_difftests("test_div")?;
 
     project
-        .analyze_test("test_div", &strategy)?
+        .analyze_test("tests", "test_div", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
     project
-        .analyze_test("test_mul", &strategy)?
+        .analyze_test("tests", "test_mul", &strategy)?
         .assert_is_clean()?;
 
     Ok(())
@@ -215,8 +215,8 @@ fn test_git_diff_files(
         project.test_code(
             "add",
             r#"
-    #[cargo_difftests_testclient::test]
-    fn test_add(_: &DifftestsEnv) {
+    #[test]
+    fn test_add() {
         assert_eq!(add(1, 2), 3);
     }
     "#,
@@ -232,7 +232,7 @@ fn test_git_diff_files(
 
     project.run_all_tests_difftests()?;
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     // edit file, so it is different from HEAD
@@ -243,7 +243,7 @@ fn test_git_diff_files(
 
     // now the algorithm should tell us that it's dirty
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_dirty()?;
 
     // but if we go back to the old version of the file
@@ -252,7 +252,7 @@ fn test_git_diff_files(
 
     // it should be clean again
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     Ok(())
@@ -293,8 +293,8 @@ fn test_git_diff_files_with_commit(
         project.test_code(
             "add",
             r#"
-    #[cargo_difftests_testclient::test]
-    fn test_add(_: &DifftestsEnv) {
+    #[test]
+    fn test_add() {
         assert_eq!(add(1, 2), 3);
     }
     "#,
@@ -324,21 +324,21 @@ fn test_git_diff_files_with_commit(
     };
 
     project
-        .analyze_test("test_add", &strategy2)?
+        .analyze_test("tests", "test_add", &strategy2)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_dirty()?;
 
     project.edit("src/lib.rs", "pub fn add(a: i32, b: i32) -> i32 { a + b }")?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_add", &strategy2)?
+        .analyze_test("tests", "test_add", &strategy2)?
         .assert_is_dirty()?;
 
     Ok(())
@@ -395,13 +395,13 @@ pub fn extra() {
         project.test_code(
             "{add, sub}",
             r#"
-#[cargo_difftests_testclient::test]
-fn test_add(_: &DifftestsEnv) {
+#[test]
+fn test_add() {
     assert_eq!(add(1, 2), 3);
 }
 
-#[cargo_difftests_testclient::test]
-fn test_sub(_: &DifftestsEnv) {
+#[test]
+fn test_sub() {
     assert_eq!(sub(3, 2), 1);
 }
 
@@ -424,11 +424,11 @@ fn test_sub(_: &DifftestsEnv) {
     };
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
 
     project.edit(
@@ -451,10 +451,10 @@ pub fn extra() {
     )?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_dirty()?;
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
 
     project.edit(
@@ -477,11 +477,11 @@ pub fn extra() {
     )?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_dirty()?;
 
     project.edit(
@@ -505,11 +505,11 @@ pub fn extra() {
     )?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
 
     // go back to original state
@@ -532,11 +532,11 @@ pub fn extra() {
     )?;
 
     project
-        .analyze_test("test_add", &strategy)?
+        .analyze_test("tests", "test_add", &strategy)?
         .assert_is_clean()?;
 
     project
-        .analyze_test("test_sub", &strategy)?
+        .analyze_test("tests", "test_sub", &strategy)?
         .assert_is_clean()?;
 
     Ok(())

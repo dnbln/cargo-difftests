@@ -16,9 +16,9 @@
 
 use std::marker::PhantomData;
 
-use cargo_difftests_core::{CoreGroupDesc, CoreTestDesc};
+use cargo_difftests_core::CoreTestDesc;
 
-use crate::{AnalyzeAllSingleTestGroup, DifftestsResult};
+use crate::{difftest::TestInfo, AnalyzeAllSingleTest, DifftestsResult};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum State {
@@ -153,45 +153,33 @@ impl<'invocation> TestRunnerInvocationTestCounts<'invocation> {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TestRerunnerInvocation {
-    tests: Vec<CoreTestDesc>,
-    groups: Vec<CoreGroupDesc>,
+    tests: Vec<TestInfo>,
 }
 
 impl TestRerunnerInvocation {
     pub fn create_invocation_from<'a>(
-        iter: impl IntoIterator<Item = &'a AnalyzeAllSingleTestGroup>,
+        iter: impl IntoIterator<Item = &'a AnalyzeAllSingleTest>,
     ) -> DifftestsResult<Self> {
         let mut tests = vec![];
-        let mut groups = vec![];
 
         for g in iter {
             if let Some(difftest) = &g.difftest {
-                tests.push(difftest.load_test_desc()?);
-            } else if let Some(difftest_group) = &g.difftest_group {
-                groups.push(difftest_group.load_self_json()?);
+                tests.push(difftest.test_info()?);
             } else {
                 // Most likely came from an index.
-                assert_eq!(g.test_desc.len(), 1);
-                let [test] = g.test_desc.as_slice() else {
-                    unreachable!()
-                };
-                tests.push(test.clone());
+                tests.push(g.test_info.clone());
             }
         }
 
-        Ok(Self { tests, groups })
+        Ok(Self { tests })
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tests.is_empty() && self.groups.is_empty()
+        self.tests.is_empty()
     }
 
-    pub fn tests(&self) -> &[CoreTestDesc] {
+    pub fn tests(&self) -> &[TestInfo] {
         &self.tests
-    }
-
-    pub fn groups(&self) -> &[CoreGroupDesc] {
-        &self.groups
     }
 
     pub fn test_counts(&self) -> TestRunnerInvocationTestCounts {

@@ -190,17 +190,12 @@ use git2::{DiffDelta, DiffHunk};
 use log::{debug, info, warn};
 
 use crate::analysis_data::CoverageData;
-use crate::group_difftest::GroupDifftestGroup;
 use crate::index_data::TestIndex;
 use crate::{Difftest, DifftestsError, DifftestsResult};
 
 enum AnalysisContextInternal<'r> {
     DifftestWithCoverageData {
         difftest: &'r mut Difftest,
-        profdata: CoverageData,
-    },
-    DifftestGroupWithCoverageData {
-        difftest_group: &'r GroupDifftestGroup,
         profdata: CoverageData,
     },
     IndexData {
@@ -244,16 +239,6 @@ impl AnalysisContext<'static> {
 
         Ok(Self::from_index(index))
     }
-
-    pub fn with_index_from_difftest_group(
-        difftest_group: &GroupDifftestGroup,
-    ) -> DifftestsResult<Self> {
-        let Some(index) = difftest_group.read_index_data()? else {
-            panic!("Difftest group does not have index data")
-        };
-
-        Ok(Self::from_index(index))
-    }
 }
 
 impl<'r> AnalysisContext<'r> {
@@ -264,26 +249,10 @@ impl<'r> AnalysisContext<'r> {
         }
     }
 
-    pub(crate) fn new_from_difftest_group(
-        difftest_group: &'r GroupDifftestGroup,
-        profdata: CoverageData,
-    ) -> Self {
-        Self {
-            internal: AnalysisContextInternal::DifftestGroupWithCoverageData {
-                difftest_group,
-                profdata,
-            },
-            result: AnalysisResult::Clean,
-        }
-    }
-
     /// Get the optional [`CoverageData`] that is used for analysis.
     pub fn get_profdata(&self) -> Option<&CoverageData> {
         match &self.internal {
-            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. }
-            | AnalysisContextInternal::DifftestGroupWithCoverageData { profdata, .. } => {
-                Some(profdata)
-            }
+            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. } => Some(profdata),
             AnalysisContextInternal::IndexData { .. } => None,
         }
     }
@@ -292,16 +261,14 @@ impl<'r> AnalysisContext<'r> {
     pub fn get_difftest(&self) -> Option<&Difftest> {
         match &self.internal {
             AnalysisContextInternal::DifftestWithCoverageData { difftest, .. } => Some(difftest),
-            AnalysisContextInternal::DifftestGroupWithCoverageData { .. }
-            | AnalysisContextInternal::IndexData { .. } => None,
+            AnalysisContextInternal::IndexData { .. } => None,
         }
     }
 
     /// Get the optional [`TestIndex`] that is used for analysis.
     pub fn get_index(&self) -> Option<&TestIndex> {
         match &self.internal {
-            AnalysisContextInternal::DifftestWithCoverageData { .. }
-            | AnalysisContextInternal::DifftestGroupWithCoverageData { .. } => None,
+            AnalysisContextInternal::DifftestWithCoverageData { .. } => None,
             AnalysisContextInternal::IndexData { index } => Some(index),
         }
     }
@@ -321,10 +288,7 @@ impl<'r> AnalysisContext<'r> {
     pub fn test_run_at(&self) -> DifftestsResult<SystemTime> {
         match &self.internal {
             AnalysisContextInternal::DifftestWithCoverageData { difftest, .. } => {
-                difftest.self_json_mtime()
-            }
-            AnalysisContextInternal::DifftestGroupWithCoverageData { difftest_group, .. } => {
-                Ok(difftest_group.mtime())
+                Ok(difftest.test_run_time())
             }
             AnalysisContextInternal::IndexData { index } => Ok(index.test_run.into()),
         }
@@ -352,13 +316,6 @@ impl<'r> AnalysisContext<'r> {
                         region_idx: 0,
                     }
                 }
-                AnalysisContextInternal::DifftestGroupWithCoverageData { .. } => {
-                    RegionsIterState::CoverageData {
-                        mapping_idx: 0,
-                        function_idx: 0,
-                        region_idx: 0,
-                    }
-                }
                 AnalysisContextInternal::IndexData { .. } => {
                     RegionsIterState::IndexData { region_idx: 0 }
                 }
@@ -368,8 +325,7 @@ impl<'r> AnalysisContext<'r> {
 
     pub fn files(&self, include_registry_files: bool) -> BTreeSet<PathBuf> {
         match &self.internal {
-            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. }
-            | AnalysisContextInternal::DifftestGroupWithCoverageData { profdata, .. } => profdata
+            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. } => profdata
                 .data
                 .iter()
                 .flat_map(|it| {
@@ -420,8 +376,7 @@ impl<'r> Iterator for AnalysisRegions<'r> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match &self.cx.internal {
-            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. }
-            | AnalysisContextInternal::DifftestGroupWithCoverageData { profdata, .. } => {
+            AnalysisContextInternal::DifftestWithCoverageData { profdata, .. } => {
                 let RegionsIterState::CoverageData {
                     region_idx,
                     mapping_idx,

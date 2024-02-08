@@ -10,7 +10,7 @@ repository.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["cargo-difftests-core/groups"]
+default = []
 
 [dependencies]
 anyhow.workspace = true
@@ -34,10 +34,6 @@ thiserror.workspace = true
 [[bin]]
 name = "rustc-wrapper-difftests"
 path = "src/bin/rustc-wrapper-difftests.rs"
-
-[[bin]]
-name = "rustc-wrapper-difftests-workspace"
-path = "src/bin/rustc-wrapper-difftests-workspace.rs"
 
 [[bin]]
 name = "cargo-difftests-default-rerunner"

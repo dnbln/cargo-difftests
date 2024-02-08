@@ -7,7 +7,6 @@ edition = "2021"
 
 [features]
 default = [
-    "cargo-difftests-testclient/parallel-groups",
     "cargo-difftests-testclient/compile-index-and-clean",
 ]
 

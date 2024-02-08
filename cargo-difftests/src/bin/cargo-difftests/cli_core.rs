@@ -9,7 +9,7 @@ use anyhow::bail;
 use cargo_difftests::{
     analysis::GitDiffStrategy,
     difftest::{DiscoverIndexPathResolver, ExportProfdataConfig},
-    AnalysisVerdict, AnalyzeAllSingleTestGroup, IndexCompareDifferences, TouchSameFilesDifference,
+    AnalysisVerdict, AnalyzeAllSingleTest, IndexCompareDifferences, TouchSameFilesDifference,
 };
 use clap::{Args, ValueEnum};
 use log::info;
@@ -40,17 +40,6 @@ pub struct CompileTestIndexFlags {
     /// Whether to flatten all files to a directory.
     #[clap(long)]
     pub flatten_files_to: Option<FlattenFilesTarget>,
-    /// Whether to remove the binary path from the difftest info
-    /// in the index.
-    ///
-    /// This is enabled by default, as it is expected to be an absolute
-    /// path.
-    #[clap(
-        long = "no-remove-bin-path",
-        default_value_t = true,
-        action = clap::ArgAction::SetFalse,
-    )]
-    pub remove_bin_path: bool,
     /// Whether to generate a full index, or a tiny index.
     ///
     /// The difference lies in the fact that the full index will contain
@@ -80,7 +69,6 @@ impl Default for CompileTestIndexFlags {
     fn default() -> Self {
         Self {
             flatten_files_to: Some(FlattenFilesTarget::RepoRoot),
-            remove_bin_path: true,
             full_index: false,
             #[cfg(windows)]
             path_slash_replace: true,
@@ -421,7 +409,7 @@ impl AnalyzeAllActionArgs {
     pub fn perform_for(
         &self,
         ctxt: &CargoDifftestsContext,
-        results: &[AnalyzeAllSingleTestGroup],
+        results: &[AnalyzeAllSingleTest],
     ) -> CargoDifftestsResult {
         match self.action {
             AnalyzeAllActionKind::Print => {

@@ -19,8 +19,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use cargo_difftests_core::CoreTestDesc;
-use group_difftest::GroupDifftestGroup;
+use difftest::TestInfo;
 
 use crate::analysis::AnalysisResult;
 use crate::difftest::Difftest;
@@ -29,7 +28,6 @@ use crate::index_data::TestIndex;
 pub mod analysis;
 pub mod analysis_data;
 pub mod difftest;
-pub mod group_difftest;
 pub mod index_data;
 pub mod test_rerunner_core;
 pub mod bin_context;
@@ -53,9 +51,6 @@ pub enum DifftestsError {
     /// The `self.json` file does not exist.
     #[error("Self json does not exist: {0:?}")]
     SelfJsonDoesNotExist(PathBuf),
-    /// The `self.profraw` file does not exist.
-    #[error("Self profraw does not exist: {0:?}")]
-    SelfProfrawDoesNotExist(PathBuf),
     /// The `cargo_difftests_version` file does not exist.
     #[error("cargo_difftests_version file does not exist: {0:?}")]
     CargoDifftestsVersionDoesNotExist(PathBuf),
@@ -152,22 +147,18 @@ pub enum TouchSameFilesDifference {
 }
 
 /// When using `analyze-all`, the output is a JSON stream of type
-/// [Vec]<[AnalyzeAllSingleTestGroup]>.
+/// [Vec]<[AnalyzeAllSingleTest]>.
 ///
 /// This is in the library so that it can be used by consumers of the
 /// `cargo difftests` binary.
 #[derive(serde::Serialize, serde::Deserialize)]
-pub struct AnalyzeAllSingleTestGroup {
+pub struct AnalyzeAllSingleTest {
     /// The [Difftest] that was analyzed, or [None] if
     /// the analysis was performed on the index data alone,
     /// with no [Difftest] associated.
     pub difftest: Option<Difftest>,
-    /// The [GroupDifftestGroup] that was analyzed, or [None] if
-    /// the analysis was performed on the index data alone,
-    /// with no [GroupDifftestGroup] associated.
-    pub difftest_group: Option<GroupDifftestGroup>,
-    /// The description of the test(s) that were analyzed.
-    pub test_desc: Vec<CoreTestDesc>,
+    /// The description of the test that was analyzed.
+    pub test_info: TestInfo,
     /// The result of the analysis.
     pub verdict: AnalysisVerdict,
 }

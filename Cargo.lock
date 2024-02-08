@@ -157,20 +157,10 @@ name = "cargo-difftests-testclient"
 version = "0.5.0"
 dependencies = [
  "cargo-difftests-core",
- "cargo-difftests-testclient-macros",
  "libc",
  "log",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "cargo-difftests-testclient-macros"
-version = "0.5.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

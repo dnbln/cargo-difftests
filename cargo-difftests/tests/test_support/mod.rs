@@ -77,63 +77,6 @@ where
     }
 }
 
-pub struct DifftestsSetupCode<T: FileContents>(pub T);
-
-impl<T> FileContents for DifftestsSetupCode<T>
-where
-    T: FileContents,
-{
-    fn to_content(&self, p: &CargoProject) -> Cow<str> {
-        Cow::Owned(format!(
-            r#"
-#[cfg(cargo_difftests)]
-type DifftestsEnv = cargo_difftests_testclient::DifftestsEnv;
-
-#[cfg(not(cargo_difftests))]
-type DifftestsEnv = ();
-
-#[cfg(cargo_difftests)]
-#[derive(serde::Serialize, Clone)]
-struct ExtraArgs {{
-    pkg_name: String,
-    crate_name: String,
-    bin_name: Option<String>,
-    test_name: String,
-}}
-
-#[must_use]
-fn setup_difftests(test_name: &str) -> DifftestsEnv {{
-    #[cfg(cargo_difftests)]
-    {{
-        let tmpdir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-            .join("cargo-difftests")
-            .join("testsuite")
-            .join(env!("DIFFTESTS_TEST_NAME"))
-            .join(test_name);
-        let difftests_env = cargo_difftests_testclient::init(
-            cargo_difftests_testclient::TestDesc::<ExtraArgs> {{
-                bin_path: std::env::current_exe().unwrap(),
-                extra: ExtraArgs {{
-                    pkg_name: env!("CARGO_PKG_NAME").to_string(),
-                    crate_name: env!("CARGO_CRATE_NAME").to_string(),
-                    bin_name: option_env!("CARGO_BIN_NAME").map(ToString::to_string),
-                    test_name: test_name.to_string(),
-                }},
-            }},
-            &tmpdir,
-        )
-        .unwrap();
-        difftests_env
-    }}
-}}
-
-    {}
-        "#,
-            self.0.to_content(p)
-        ))
-    }
-}
-
 impl CargoProject {
     pub fn edit(&self, file: impl AsRef<Path>, contents: impl FileContents) -> R {
         let p = self.path.join(file);
@@ -159,18 +102,41 @@ impl CargoProject {
         Ok(())
     }
 
-    const TARGET_DIR_WS: &'static str = "../../..";
-
-    pub fn run_cargo_build_difftests(&self) -> R {
-        self._internal_run_cargo(&["build", "--profile", "difftests"])
-    }
-
     pub fn run_test_difftests(&self, test_name: &str) -> R {
-        self._internal_run_cargo(&["test", "--profile", "difftests", test_name, "--", "--exact"])
+        let mut cmd = self._internal_cargo_difftests_cmd()?;
+
+        cmd.args(&["collect-profiling-data", "--exact", "--filter", test_name]);
+
+        let output = cmd.output()?;
+
+        if !output.status.success() {
+            println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            anyhow::bail!(
+                "command cargo-difftests failed with status: {}",
+                output.status
+            );
+        }
+
+        Ok(())
     }
 
     pub fn run_all_tests_difftests(&self) -> R {
-        self._internal_run_cargo(&["test", "--profile", "difftests"])
+        let mut cmd = self._internal_cargo_difftests_cmd()?;
+        cmd.args(&["collect-profiling-data"]);
+
+        let output = cmd.output()?;
+
+        if !output.status.success() {
+            println!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            anyhow::bail!(
+                "command cargo-difftests failed with status: {}",
+                output.status
+            );
+        }
+
+        Ok(())
     }
 
     pub fn _internal_cargo_difftests_cmd(&self) -> R<std::process::Command> {
@@ -178,6 +144,7 @@ impl CargoProject {
         command
             .arg("difftests")
             .current_dir(&self.path)
+            .env("CARGO_DIFFTESTS_ROOT", self.difftests_root())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
         Ok(command)
@@ -192,17 +159,33 @@ impl CargoProject {
         })
     }
 
+    pub fn difftests_root(&self) -> PathBuf {
+        let mut p = PathBuf::from("target");
+        p.push("tmp");
+        p.push("difftests");
+        p.push("testsuite");
+        p.push(self.test_name);
+        p
+    }
+
+    pub fn difftests_dir(&self, harness: &str, name: &str) -> PathBuf {
+        let mut p = self.difftests_root();
+        p.push(harness);
+        p.push(name);
+        p
+    }
+
     pub fn analyze_test(
         &self,
+        harness: &str,
         test_name: &str,
         strategy_info: &TestAnalysisStrategyInfo,
     ) -> R<CargoDifftestsTestAnalysis> {
         let mut command = self._internal_cargo_difftests_cmd()?;
-        command.arg("analyze").arg("--dir").arg(format!(
-            "{target_dir}/tmp/cargo-difftests/testsuite/{self_test_name}/{test_name}",
-            target_dir = Self::TARGET_DIR_WS,
-            self_test_name = self.test_name,
-        ));
+        command
+            .arg("analyze")
+            .arg("--dir")
+            .arg(self.difftests_dir(harness, test_name));
         strategy_info.args_to_cmd(&mut command);
         Ok(CargoDifftestsTestAnalysis { cmd: command })
     }
@@ -262,7 +245,7 @@ impl CargoProject {
         import: impl Into<Cow<'static, str>>,
         code: impl FileContents,
     ) -> impl FileContents {
-        DifftestsSetupCode(ProjectUseStmts(import.into(), code))
+        ProjectUseStmts(import.into(), code)
     }
 }
 
@@ -395,6 +378,7 @@ pub type R<T = ()> = anyhow::Result<T>;
 #[derive(Default)]
 pub struct CargoProjectConfig {
     pub init_git: bool,
+    pub need_deps: Vec<String>,
 }
 
 pub fn create_cargo_project(
@@ -412,34 +396,6 @@ pub fn create_cargo_project(
     }
 
     std::fs::create_dir_all(&path)?;
-
-    let rc_wrapper_difftests = env!("CARGO_BIN_EXE_rustc-wrapper-difftests");
-    let rc_wrapper_difftests_workspace = env!("CARGO_BIN_EXE_rustc-wrapper-difftests-workspace");
-    std::fs::create_dir(path.join(".cargo"))?;
-    std::fs::write(
-        path.join(".cargo/config.toml"),
-        format!(
-            r#"
-[profile.difftests]
-inherits = "dev"
-rustflags = [
-  "--cfg", "cargo_difftests",
-]
-
-[build]
-rustc-wrapper = {rc_wrapper_difftests:?}
-rustc-workspace-wrapper = {rc_wrapper_difftests_workspace:?}
-target-dir = "{target_dir}"
-
-[env]
-RUST_TEST_THREADS = "1"
-
-[unstable]
-profile-rustflags = true
-    "#,
-            target_dir = CargoProject::TARGET_DIR_WS,
-        ),
-    )?;
 
     let mut cargo_toml = format!(
         r#"
@@ -481,15 +437,9 @@ thiserror = "1.0"
     "#
     );
 
-    cargo_toml.push_str(
-        r#"
-[dependencies.serde]
-workspace = true
-
-[dependencies.cargo-difftests-testclient]
-workspace = true
-"#,
-    );
+    for dep in &config.need_deps {
+        cargo_toml.push_str(&format!("\n[dependencies.{}]\nworkspace = true\n", dep));
+    }
 
     std::fs::write(path.join("Cargo.toml"), cargo_toml)?;
 
@@ -549,23 +499,23 @@ pub fn init_sample_project(test_name: &'static str) -> R<CargoProject> {
         project.test_code(
             "{add,sub,mul,div}",
             r#"
-        #[cargo_difftests_testclient::test]
-        fn test_add(_: &DifftestsEnv) {
+        #[test]
+        fn test_add() {
             assert_eq!(add(2, 2), 4);
         }
 
-        #[cargo_difftests_testclient::test]
-        fn test_sub(_: &DifftestsEnv) {
+        #[test]
+        fn test_sub() {
             assert_eq!(sub(2, 2), 0);
         }
 
-        #[cargo_difftests_testclient::test]
-        fn test_mul(_: &DifftestsEnv) {
+        #[test]
+        fn test_mul() {
             assert_eq!(mul(2, 2), 4);
         }
 
-        #[cargo_difftests_testclient::test]
-        fn test_div(_: &DifftestsEnv) {
+        #[test]
+        fn test_div() {
             assert_eq!(div(2, 2), 1);
         }
     "#,
@@ -634,30 +584,21 @@ impl AnalysisIndexStrategyInfo {
                     .arg("--index-root")
                     .arg(index_root)
                     .arg("--root")
-                    .arg(format!(
-                        "{}/tmp/cargo-difftests",
-                        CargoProject::TARGET_DIR_WS
-                    ));
+                    .arg("target/tmp/difftests");
             }
             Self::AlwaysAndClean { index_root } => {
                 cmd.arg("--index-strategy=always-and-clean")
                     .arg("--index-root")
                     .arg(index_root)
                     .arg("--root")
-                    .arg(format!(
-                        "{}/tmp/cargo-difftests",
-                        CargoProject::TARGET_DIR_WS
-                    ));
+                    .arg("target/tmp/difftests");
             }
             Self::IfAvailable { index_root } => {
                 cmd.arg("--index-strategy=if-available")
                     .arg("--index-root")
                     .arg(index_root)
                     .arg("--root")
-                    .arg(format!(
-                        "{}/tmp/cargo-difftests",
-                        CargoProject::TARGET_DIR_WS
-                    ));
+                    .arg("target/tmp/difftests");
             }
         }
     }

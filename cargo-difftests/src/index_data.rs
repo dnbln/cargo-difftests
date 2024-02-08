@@ -23,10 +23,8 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
-use cargo_difftests_core::CoreTestDesc;
-
 use crate::analysis_data::CoverageData;
-use crate::group_difftest::GroupDifftestGroup;
+use crate::difftest::TestInfo;
 use crate::{Difftest, DifftestsResult};
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -91,7 +89,7 @@ pub struct TestIndex {
     /// The time the test was run.
     pub test_run: chrono::DateTime<chrono::Utc>,
     /// The test description.
-    pub test_desc: Vec<CoreTestDesc>,
+    pub test_info: TestInfo,
 }
 
 impl TestIndex {
@@ -104,75 +102,9 @@ impl TestIndex {
         let mut index_data = Self {
             regions: vec![],
             files: vec![],
-            test_run: difftest.self_json_mtime()?.into(),
-            test_desc: vec![difftest.load_test_desc()?],
+            test_run: difftest.test_run_time().into(),
+            test_info: difftest.test_info()?,
         };
-
-        if index_data_compiler_config.remove_bin_path {
-            for tdesc in &mut index_data.test_desc {
-                tdesc.bin_path = PathBuf::new();
-            }
-        }
-
-        let mut mapping_files = BTreeMap::<PathBuf, usize>::new();
-
-        for mapping in &profdata.data {
-            for f in &mapping.functions {
-                for region in &f.regions {
-                    if region.execution_count == 0 {
-                        continue;
-                    }
-
-                    let filename = &f.filenames[region.file_id];
-
-                    if !(index_data_compiler_config.accept_file)(filename) {
-                        continue;
-                    }
-
-                    let file_id = *mapping_files.entry(filename.clone()).or_insert_with(|| {
-                        let id = index_data.files.len();
-                        index_data
-                            .files
-                            .push((index_data_compiler_config.index_filename_converter)(
-                                filename,
-                            ));
-                        id
-                    });
-
-                    if index_data_compiler_config.index_size == IndexSize::Full {
-                        index_data.regions.push(IndexRegion {
-                            l1: region.l1,
-                            c1: region.c1,
-                            l2: region.l2,
-                            c2: region.c2,
-                            count: region.execution_count,
-                            file_id,
-                        });
-                    }
-                }
-            }
-        }
-
-        Ok(index_data)
-    }
-
-    pub fn index_group(
-        group: &GroupDifftestGroup,
-        profdata: CoverageData,
-        mut index_data_compiler_config: IndexDataCompilerConfig,
-    ) -> DifftestsResult<Self> {
-        let mut index_data = Self {
-            regions: vec![],
-            files: vec![],
-            test_run: group.mtime().into(),
-            test_desc: vec![],
-        };
-
-        if index_data_compiler_config.remove_bin_path {
-            for tdesc in &mut index_data.test_desc {
-                tdesc.bin_path = PathBuf::new();
-            }
-        }
 
         let mut mapping_files = BTreeMap::<PathBuf, usize>::new();
 
@@ -242,12 +174,6 @@ pub struct IndexDataCompilerConfig {
     /// This is useful for excluding files that are not part of the
     /// project, such as files in the cargo registry.
     pub accept_file: Box<dyn FnMut(&Path) -> bool>,
-    /// Whether to remove the binary path from the test description.
-    ///
-    /// As it is usually an absolute path (given by [`std::env::current_exe`]), it is not
-    /// really useful, and may even not exist anymore, so passing true for this field
-    /// removes it from the [`TestIndex`].
-    pub remove_bin_path: bool,
     /// The desired size of the index.
     ///
     /// This is useful for reducing the size of the index,

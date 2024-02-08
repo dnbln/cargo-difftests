@@ -4,7 +4,6 @@ members = [
     "cargo-difftests",
     "cargo-difftests-core",
     "cargo-difftests-testclient",
-    "cargo-difftests-testclient-macros",
     "sample/cargo-difftests-sample-project",
 ]
 
@@ -20,7 +19,6 @@ repository = "https://github.com/dnbln/cargo-difftests"
 cargo-difftests = { path = "cargo-difftests", version = "0.5.0" }
 cargo-difftests-core = { path = "cargo-difftests-core", version = "0.5.0" }
 cargo-difftests-testclient = { path = "cargo-difftests-testclient", version = "0.5.0" }
-cargo-difftests-testclient-macros = { path = "cargo-difftests-testclient-macros", version = "0.5.0" }
 
 anyhow = "1.0.66"
 chrono = { version = "0.4.23", features = ["serde"] }

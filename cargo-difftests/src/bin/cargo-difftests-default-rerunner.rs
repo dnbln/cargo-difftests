@@ -53,28 +53,16 @@ fn rerunner(invocation: TestRerunnerInvocation) -> Result<(), Error> {
     let mut counts = FailGuard(invocation.test_counts());
     counts.0.initialize_test_counts(invocation.tests().len())?;
 
-    let profile =
-        std::env::var("CARGO_DIFFTESTS_PROFILE").unwrap_or_else(|_| "difftests".to_owned());
-
-    let extra_cargo_args = std::env::var("CARGO_DIFFTESTS_EXTRA_CARGO_ARGS");
-    let extra_cargo_args = extra_cargo_args
-        .as_ref()
-        .map(|it| it.split(',').collect::<Vec<_>>())
-        .unwrap_or_default();
     for test in invocation.tests() {
-        let e = test.parse_extra::<TestRerunnerDefaultExtra>()?;
-        let t = counts.0.start_test(e.test_name.clone())?;
+        let t = counts.0.start_test(test.test_name.clone())?;
+
         let mut child = std::process::Command::new("cargo")
             .args(&[
-                "test",
-                "-p",
-                &e.pkg_name,
-                &e.test_name,
-                "--profile",
-                &profile,
+                "collect-profiling-data",
+                "--filter",
+                &test.test_name,
+                "--exact",
             ])
-            .args(&extra_cargo_args)
-            .args(&["--", "--exact"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()?;

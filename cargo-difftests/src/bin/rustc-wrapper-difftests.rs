@@ -19,9 +19,26 @@
 
 use std::process::ExitCode;
 
-#[path ="rustc_wrapper_impl/mod.rs"]
-mod rustc_wrapper_impl;
-
 fn main() -> std::io::Result<ExitCode> {
-    rustc_wrapper_impl::rustc_wrapper_impl(false)
+    let mut args = std::env::args().skip(1);
+    let rustc = args.next().unwrap();
+    let mut remaining = args.collect::<Vec<_>>();
+
+    if !remaining
+        .array_windows::<2>()
+        .any(|[a, b]| a == "-C" && b == "instrument-coverage")
+    {
+        remaining.push("-C".to_owned());
+        remaining.push("instrument-coverage".to_owned());
+    }
+
+    let mut cmd = std::process::Command::new(rustc);
+    cmd.args(&remaining);
+    match cmd.status()?.exit_ok() {
+        Ok(()) => Ok(ExitCode::SUCCESS),
+        Err(e) => {
+            eprintln!("error: {}", e);
+            Ok(ExitCode::FAILURE)
+        }
+    }
 }

@@ -7,7 +7,7 @@ mod core;
 mod analyze;
 mod analyze_all;
 mod analyze_all_from_index;
-mod analyze_group;
+mod collect_profiling_data;
 mod discover_difftests;
 mod low_level;
 
@@ -22,12 +22,6 @@ pub enum App {
     Analyze {
         #[clap(flatten)]
         cmd: analyze::AnalyzeCommand,
-    },
-    /// Treats all the difftests found in the given directory as a single
-    /// group, and analyzes them together.
-    AnalyzeGroup {
-        #[clap(flatten)]
-        cmd: analyze_group::AnalyzeGroupCommand,
     },
     /// Analyze all the difftests in a given directory.
     ///
@@ -47,6 +41,10 @@ pub enum App {
         #[clap(flatten)]
         cmd: analyze_all_from_index::AnalyzeAllFromIndexCommand,
     },
+    CollectProfilingData {
+        #[clap(flatten)]
+        cmd: collect_profiling_data::CollectProfilingDataCommand,
+    },
     LowLevel {
         #[clap(subcommand)]
         cmd: low_level::LowLevelCommand,
@@ -61,13 +59,13 @@ impl App {
             App::Analyze { cmd } => {
                 cmd.run(ctxt)?;
             }
-            App::AnalyzeGroup { cmd } => {
-                cmd.run(ctxt)?;
-            }
             App::AnalyzeAll { cmd } => {
                 cmd.run(ctxt)?;
             }
             App::AnalyzeAllFromIndex { cmd } => {
+                cmd.run(ctxt)?;
+            }
+            App::CollectProfilingData { cmd } => {
                 cmd.run(ctxt)?;
             }
             App::LowLevel { cmd } => {

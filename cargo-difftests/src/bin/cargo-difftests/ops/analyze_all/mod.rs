@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cargo_difftests::{bin_context::CargoDifftestsContext, AnalyzeAllSingleTestGroup};
+use cargo_difftests::{bin_context::CargoDifftestsContext, AnalyzeAllSingleTest};
 use clap::Parser;
 use prodash::unit;
 
@@ -93,10 +93,9 @@ fn run_analyze_all(
             ignore_registry_files,
         )?;
 
-        let result = AnalyzeAllSingleTestGroup {
-            test_desc: vec![difftest.load_test_desc()?],
+        let result = AnalyzeAllSingleTest {
+            test_info: difftest.test_info()?,
             difftest: Some(difftest),
-            difftest_group: None,
             verdict: r.into(),
         };
 

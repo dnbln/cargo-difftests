@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use cargo_difftests::{
     analysis::{AnalysisConfig, AnalysisContext},
     bin_context::CargoDifftestsContext,
-    AnalyzeAllSingleTestGroup,
+    AnalyzeAllSingleTest,
 };
 use clap::Parser;
 use prodash::unit;
@@ -56,7 +56,7 @@ fn run_analyze_all_from_index(
     let mut results = vec![];
 
     for index in indexes {
-        let test_desc = index.test_desc.clone();
+        let test_desc = index.test_info.clone();
 
         let r = {
             let mut analysis_cx = AnalysisContext::from_index(index);
@@ -67,10 +67,9 @@ fn run_analyze_all_from_index(
             analysis_cx.finish_analysis()
         };
 
-        let result = AnalyzeAllSingleTestGroup {
-            test_desc,
+        let result = AnalyzeAllSingleTest {
+            test_info: test_desc,
             difftest: None,
-            difftest_group: None,
             verdict: r.into(),
         };
 
