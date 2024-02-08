@@ -582,23 +582,17 @@ impl AnalysisIndexStrategyInfo {
             Self::Always { index_root } => {
                 cmd.arg("--index-strategy=always")
                     .arg("--index-root")
-                    .arg(index_root)
-                    .arg("--root")
-                    .arg("target/tmp/difftests");
+                    .arg(index_root);
             }
             Self::AlwaysAndClean { index_root } => {
                 cmd.arg("--index-strategy=always-and-clean")
                     .arg("--index-root")
-                    .arg(index_root)
-                    .arg("--root")
-                    .arg("target/tmp/difftests");
+                    .arg(index_root);
             }
             Self::IfAvailable { index_root } => {
                 cmd.arg("--index-strategy=if-available")
                     .arg("--index-root")
-                    .arg(index_root)
-                    .arg("--root")
-                    .arg("target/tmp/difftests");
+                    .arg(index_root);
             }
         }
     }
