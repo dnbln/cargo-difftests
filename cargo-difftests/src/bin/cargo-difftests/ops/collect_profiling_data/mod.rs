@@ -39,6 +39,7 @@ impl CollectProfilingDataCommand {
             self.root.root,
             self.export_profdata_args,
             self.index_compilation_args.compile_index,
+            self.index_compilation_args.and_clean,
             self.index_compilation_args,
             self.ignore_registry_files,
             self.filter,
@@ -52,6 +53,7 @@ fn run_collect_profiling_data(
     root: PathBuf,
     export_profdata_args: ExportProfdataConfigFlags,
     compile_index: bool,
+    and_clean: bool,
     index_compilation_args: AnalysisIndex,
     ignore_registry_files: IgnoreRegistryFilesFlag,
     filter: Option<String>,
@@ -152,6 +154,10 @@ fn run_collect_profiling_data(
                                 }
                             }
                             index_data.write_to_file(&path)?;
+                        }
+
+                        if and_clean {
+                            difftest.clean()?;
                         }
                     }
                 }

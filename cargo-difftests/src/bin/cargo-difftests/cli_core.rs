@@ -267,6 +267,8 @@ impl Display for DirtyAlgorithm {
 pub struct AnalysisIndex {
     #[clap(long)]
     pub compile_index: bool,
+    #[clap(long)]
+    pub and_clean: bool,
     /// The root directory where all index files will be stored.
     ///
     /// Only used if `--index-strategy` is set to `always`, `always-and-clean`
@@ -300,10 +302,10 @@ impl AnalysisIndex {
         &self,
         root: Option<PathBuf>,
     ) -> Result<Option<DiscoverIndexPathResolver>, IndexResolverError> {
-        let index_s = if self.compile_index {
-            AnalysisIndexStrategy::Always
-        } else {
-            self.index_strategy
+        let index_s = match (self.compile_index, self.and_clean) {
+            (true, false) => AnalysisIndexStrategy::Always,
+            (true, true) => AnalysisIndexStrategy::AlwaysAndClean,
+            (false, _) => self.index_strategy,
         };
 
         match index_s {

@@ -10,7 +10,8 @@ use cargo_difftests::{
     analysis::{file_is_from_cargo_registry, AnalysisConfig, AnalysisContext, AnalysisResult},
     bin_context::CargoDifftestsContext,
     difftest::{Difftest, DiscoverIndexPathResolver},
-    index_data::{IndexDataCompilerConfig, IndexSize, TestIndex}, AnalysisVerdict,
+    index_data::{IndexDataCompilerConfig, IndexSize, TestIndex},
+    AnalysisVerdict,
 };
 use log::{error, info, warn};
 use prodash::unit;
@@ -256,10 +257,7 @@ impl TestHarness {
         let output = std::process::Command::new(&self.0)
             .args(&["--list", "--format=terse"])
             .stdout(std::process::Stdio::piped())
-            .env(
-                "LLVM_PROFILE_FILE",
-                std::env::temp_dir().join("%m_%p.profraw"),
-            )
+            .env("LLVM_PROFILE_FILE", temp_dir_profile_file())
             .output()?;
 
         if !output.status.success() {
@@ -281,6 +279,10 @@ impl TestHarness {
 }
 
 pub struct ListedTest(TestHarness, String);
+
+pub fn temp_dir_profile_file() -> PathBuf {
+    std::env::temp_dir().join("%m_%p.profraw")
+}
 
 impl ListedTest {
     pub fn get_harness_name(&self) -> &String {
@@ -340,6 +342,7 @@ pub fn collect_test_harnesses() -> CargoDifftestsResult<Vec<TestHarness>> {
             "json-render-diagnostics",
         ])
         .env("RUSTC_WORKSPACE_WRAPPER", "rustc-wrapper-difftests")
+        .env("LLVM_PROFILE_FILE", temp_dir_profile_file())
         .stdout(std::process::Stdio::piped())
         .spawn()?;
 
