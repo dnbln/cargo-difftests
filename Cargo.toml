@@ -8,7 +8,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 description = "A selective regression testing tool for Rust projects"
 license = "Apache-2.0"
@@ -16,9 +16,9 @@ readme = "README.md"
 repository = "https://github.com/dnbln/cargo-difftests"
 
 [workspace.dependencies]
-cargo-difftests = { path = "cargo-difftests", version = "0.5.0" }
-cargo-difftests-core = { path = "cargo-difftests-core", version = "0.5.0" }
-cargo-difftests-testclient = { path = "cargo-difftests-testclient", version = "0.5.0" }
+cargo-difftests = { path = "cargo-difftests", version = "0.6.0" }
+cargo-difftests-core = { path = "cargo-difftests-core", version = "0.6.0" }
+cargo-difftests-testclient = { path = "cargo-difftests-testclient", version = "0.6.0" }
 
 anyhow = "1.0.66"
 chrono = { version = "0.4.23", features = ["serde"] }

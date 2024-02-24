@@ -1,1 +1,1 @@
-{"files":["sample/cargo-difftests-sample-project/tests/tests.rs","sample/cargo-difftests-sample-project/src/lib.rs"],"test_run":"2024-02-08T17:23:40.606745700Z","test_info":{"test_name":"test_add","test_binary":"C:\\Users\\dinub\\proj\\cargo-difftests\\target\\debug\\deps\\tests-4ba5c675a9787dee.exe","extra_desc":null}}
+{"files":["sample/cargo-difftests-sample-project/tests/tests.rs","sample/cargo-difftests-sample-project/src/lib.rs"],"test_run":"2024-02-24T17:04:45.382020600Z","test_info":{"test_name":"test_add","test_binary":"","extra_desc":null}}

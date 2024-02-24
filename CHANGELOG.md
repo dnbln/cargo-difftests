@@ -1,22 +1,18 @@
-# Unreleased
+# 0.6.0
 
-## Create an index right after a test finishes
+Released: 2023-02-24
 
-With the `compile-index-and-clean` feature of the testclient,
-it can invoke `cargo-difftests` to create an index immediately
-after writing the profile, and then cleaning the intermediate
-profiling data. This only happens if the testclient is configured
-to do so (see `DifftestsEnv::and_compile_index_and_clean_on_exit`).
+## `cargo-difftests` now controls the test flow
 
-This, together with the tiny indexes feature released in `0.5.0`,
-have the effect of a huge reduction in the on-disk space required
-to store profiling data, only a couple KBs/test (depending on project
-of course; on the sample project, the average is somewhere around 700
-bytes / test).
+The `cargo-difftests-testclient` is now optional to use,
+and may be used if the project needs to store some other
+information about tests.
 
-## Export basic dummy interface for `DifftestsEnv`
+Otherwise, `cargo-difftests` communicates with the test
+harness to list out `#[test]`s and runs them individually
+in separate processes, similarly to `cargo-nextest`.
 
-So tests that use it can do so without lots of cfg's.
+(See `cargo difftests collect-profiling-data --help` and `cargo difftests rerun-dirty-from-indexes --help` for simple usage).
 
 # 0.5.0
 
