@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct CoverageData {
     pub data: Vec<CoverageMapping>,
     #[serde(rename = "type")]
@@ -29,7 +28,6 @@ pub struct CoverageData {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct CoverageMapping {
     pub functions: Vec<CoverageFunction>,
     pub files: Vec<CoverageFile>,
@@ -37,7 +35,6 @@ pub struct CoverageMapping {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct CoverageFile {
     pub filename: PathBuf,
     pub branches: Vec<CoverageBranch>,
@@ -150,7 +147,6 @@ impl From<CoverageFileSegment> for CoverageFileSegmentSerDe {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct Expansion {
     pub branches: Vec<CoverageBranch>,
     pub filenames: Vec<PathBuf>,
@@ -165,7 +161,6 @@ pub struct TargetRegion {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy)]
-#[serde(deny_unknown_fields)]
 pub struct FileSummary {
     pub lines: GenericSummary,
     pub functions: GenericSummary,
@@ -175,7 +170,6 @@ pub struct FileSummary {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy)]
-#[serde(deny_unknown_fields)]
 pub struct BranchesSummary {
     #[serde(flatten)]
     pub generic: GenericSummary,
@@ -183,7 +177,6 @@ pub struct BranchesSummary {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy)]
-#[serde(deny_unknown_fields)]
 pub struct RegionsSummary {
     #[serde(flatten)]
     pub generic: GenericSummary,
@@ -191,7 +184,6 @@ pub struct RegionsSummary {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy)]
-#[serde(deny_unknown_fields)]
 pub struct GenericSummary {
     pub count: usize,
     pub covered: usize,
@@ -199,7 +191,6 @@ pub struct GenericSummary {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct CoverageFunction {
     pub branches: Vec<CoverageBranch>,
     pub filenames: Vec<PathBuf>,
@@ -274,7 +265,6 @@ where
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy)]
-#[serde(deny_unknown_fields)]
 pub struct BinarySummary {
     pub lines: GenericSummary,
     pub functions: GenericSummary,

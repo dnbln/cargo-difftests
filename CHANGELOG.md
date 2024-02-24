@@ -1,3 +1,10 @@
+# 0.6.1
+
+Released: 2023-02-24
+
+Fixed a minor bug with deserializing profiling data from
+`llvm-cov export`.
+
 # 0.6.0
 
 Released: 2023-02-24
