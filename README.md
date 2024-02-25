@@ -15,6 +15,10 @@ and none of the code executed in the test has been changed since,
 then the result of the test will not change. While there are some
 edge cases to this, it is generally true for most crates out there.
 
+Short demo:
+
+[![asciicast](https://asciinema.org/a/642902.svg)](https://asciinema.org/a/642902)
+
 ## Prerequisites
 
 - Nightly rust.
